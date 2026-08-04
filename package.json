@@ -1,0 +1,22 @@
+{
+  "name": "asciidoc-preprocessor",
+  "version": "1.0.0",
+  "description": "A stream-clocked line transducer preprocessor for AsciiDoc: consumes the source line stream and emits an output line stream plus a provenance map, as an independent stage from block parsing.",
+  "main": "src/transducer.js",
+  "type": "module",
+  "scripts": {
+    "test": "node --test 'test/**/*.test.js'",
+    "test:unit": "node --test 'test/unit/**/*.test.js'",
+    "test:comparison": "node --test 'test/comparison/**/*.test.js'"
+  },
+  "keywords": [
+    "asciidoc",
+    "preprocessor",
+    "transducer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "asciidoctor": "^4.0.7"
+  }
+}
