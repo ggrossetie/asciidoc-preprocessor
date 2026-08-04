@@ -102,13 +102,13 @@ code execution as part of a language grammar), not an oversight.
 
 ## Document conformance (§6)
 
-| Rule | What it requires | Status here |
-| ---- | ----------------- | ----------- |
-| D1 | Entry-shaped lines outside opaque regions sit at a block boundary | out of scope — requires the block model, which this project deliberately does not have |
-| D2 | Conditionals balanced & nested within each include unit | **diagnosed**, lexically, at end of unit (`ConditionalStack.checkUnitEnd`) |
-| D3 | Each include unit leaves the delimiter stack as it found it | **diagnosed**, lexically, at end of unit (`DelimiterStack.checkUnitEnd`) |
-| D4 | Directives rely only on transducer-reachable attributes | satisfied by construction (directives only ever consult `AttributeState`) — no parser-set attributes exist for them to leak from |
-| D5 | Includes outside opaque regions sit at a block boundary | out of scope — requires the block model |
+| Rule | What it requires                                                  | Status here                                                                                                                      |
+|------|-------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| D1   | Entry-shaped lines outside opaque regions sit at a block boundary | out of scope — requires the block model, which this project deliberately does not have                                           |
+| D2   | Conditionals balanced & nested within each include unit           | **diagnosed**, lexically, at end of unit (`ConditionalStack.checkUnitEnd`)                                                       |
+| D3   | Each include unit leaves the delimiter stack as it found it       | **diagnosed**, lexically, at end of unit (`DelimiterStack.checkUnitEnd`)                                                         |
+| D4   | Directives rely only on transducer-reachable attributes           | satisfied by construction (directives only ever consult `AttributeState`) — no parser-set attributes exist for them to leak from |
+| D5   | Includes outside opaque regions sit at a block boundary           | out of scope — requires the block model                                                                                          |
 
 For a document violating none of these, the guarantee is: deterministic,
 portable output; agreement between the transducer's state and any
@@ -138,12 +138,12 @@ reproducible examples (Appendix A) through both this transducer and the
 and asserts on the actual observed behavior of each — not a description of
 it. Summary:
 
-| Example | Asciidoctor (parser-clocked) | This transducer (stream-clocked) |
-| ------- | ----------------------------- | --------------------------------- |
-| `:flag: yes` + `ifdef::flag[...]` inside a list's look-ahead buffer | both conditionals **silently dropped**; `{flag}` still substitutes to `yes` elsewhere — the same attribute is simultaneously defined and undefined, depending which layer consults it | both conditionals **kept**, consistently, because the entry precedes them in the stream |
-| the identical `:flag:`/`ifdef` pair outside a list | works | works (no special case needed — there was never a list to begin with) |
-| attribute entry inside an AsciiDoc table cell (`a|`) | never reaches document-level state; a directive in the table still reads pre-table state; the cell's own `{ref}` resolves via nested-document parsing | identical outcome, reproduced by the opaque-region write barrier (§4) — no notion of cells required |
-| a conforming document with no list/table involved | agrees | agrees |
+| Example                                                             | Asciidoctor (parser-clocked)                                                                                                                                                          | This transducer (stream-clocked)                                                                    |
+|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| `:flag: yes` + `ifdef::flag[...]` inside a list's look-ahead buffer | both conditionals **silently dropped**; `{flag}` still substitutes to `yes` elsewhere — the same attribute is simultaneously defined and undefined, depending which layer consults it | both conditionals **kept**, consistently, because the entry precedes them in the stream             |
+| the identical `:flag:`/`ifdef` pair outside a list                  | works                                                                                                                                                                                 | works (no special case needed — there was never a list to begin with)                               |
+| attribute entry inside an AsciiDoc table cell (`a\|`)               | never reaches document-level state; a directive in the table still reads pre-table state; the cell's own `{ref}` resolves via nested-document parsing                                 | identical outcome, reproduced by the opaque-region write barrier (§4) — no notion of cells required |
+| a conforming document with no list/table involved                   | agrees                                                                                                                                                                                | agrees                                                                                              |
 
 Run it yourself:
 
