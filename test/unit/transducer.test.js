@@ -240,3 +240,15 @@ test('a circular include is diagnosed and does not hang', () => {
   const result = transduce({ filename: 'a.adoc', text: files['a.adoc'] }, { readInclude: fs(files) });
   assert.ok(result.diagnostics.some((d) => d.rule === 'include-cycle'));
 });
+
+test('comment region (§4): inert — no directive is evaluated, lines are emitted verbatim', () => {
+  const result = transduce(lines('////', 'ifdef::nope[]', 'include::missing.adoc[]', '\\ifdef::x[]', ':c: 1', '////', '', 'AFTER'), { readInclude: () => null });
+  assert.deepEqual(result.lines, ['////', 'ifdef::nope[]', 'include::missing.adoc[]', '\\ifdef::x[]', ':c: 1', '////', '', 'AFTER']);
+  assert.deepEqual(result.diagnostics, [], 'no unbalanced conditional, no include read attempt');
+  assert.equal(result.attributes.c, undefined);
+});
+
+test('comment region (§4): a conditional around a comment block still applies to it as a whole', () => {
+  const result = transduce(lines('ifdef::nope[]', '////', 'hidden comment', '////', 'endif::[]', 'AFTER'));
+  assert.deepEqual(result.lines, ['AFTER']);
+});

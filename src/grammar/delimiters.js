@@ -5,6 +5,10 @@
 // and still resolve against the state from before the region (write
 // barrier, not a read barrier).
 //
+// Comment regions (`////`) are the exception: they are *inert*, a read
+// barrier as well. No directive is evaluated inside them (as Asciidoctor's
+// skip_processing does), and their lines reach the output verbatim.
+//
 // Non-verbatim delimited blocks (example, sidebar, open, quote, etc.) are
 // deliberately NOT tracked: an attribute entry is legal for the parser
 // there, so lexical tracking is correct as-is.

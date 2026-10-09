@@ -128,9 +128,15 @@ No other substitution is applied by the preprocessor.
 The bounded context includes an **open-delimiter stack**, maintained lexically.
 A line consisting solely of a delimiter run that opens or closes a verbatim delimited block (listing `----`, literal `....`, comment `////`) or a table block (`|===`, `,===`, `:===`, `!===`) pushes or pops the stack per the delimited-block pairing rules.
 While a verbatim, comment, or table delimiter is open, lines are **opaque**: they are not scanned for attribute entry lines.
-Preprocessor directive lines remain recognized inside opaque regions.
+Preprocessor directive lines remain recognized inside verbatim and table regions.
 They are evaluated against the attribute state as accumulated up to that point.
 Opacity is a **write barrier** (no state updates from within the region), not a read barrier (directives inside the region still consult the full state from before and outside it).
+
+Comment regions are the exception: they are **inert**, a read barrier as well as a write barrier.
+While a comment delimiter is open, no line is recognized as a directive, an escaped directive, or an attribute entry.
+Every line up to and including the matching closing delimiter is emitted unchanged.
+Only the closing delimiter is recognized.
+A conditional that encloses a comment region still applies to the region as a whole.
 
 *Non-normative note.*
 Opacity prevents displayed text that merely resembles an attribute entry (e.g. inside a code listing) from polluting the preprocessor state.
@@ -139,6 +145,11 @@ Table opacity is not an approximation but the *exact* document-level semantics.
 An attribute entry inside an AsciiDoc table cell is scoped to the cell's nested document and never reaches the document attribute state.
 Entry-shaped text in a plain cell is display text (verified, Appendix A.3).
 The preprocessor therefore needs no notion of cells or of blocks within cells.
+Comment regions are inert because evaluating directives there has no use and real risk.
+Commenting out a passage that contains an unbalanced `ifdef` would otherwise remove the rest of the document.
+An `include` inside a comment would read, and possibly fail on, a file whose content is never displayed.
+Inertness also matches the reference implementation, which reads comment block content without preprocessing.
+And it keeps the source text intact for parsers that preserve comments in the ASG: the comment node then holds exactly what the author wrote, not a preprocessed variant of it.
 Open question: whether passthrough delimiters (`++++`) should also be opaque.
 Non-verbatim delimited blocks (example, sidebar, open) are deliberately *not* opaque: an attribute entry is legal for the parser there, so tracking it lexically is correct.
 

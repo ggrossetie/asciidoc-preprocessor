@@ -166,8 +166,16 @@ function transduceUnit(unit, ctx) {
       return;
     }
 
-    // Directives remain recognized inside opaque regions (write barrier,
-    // not a read barrier).
+    // A comment region is inert: a read *and* write barrier. Its lines are
+    // emitted exactly as written (no directive evaluated, no escape removed),
+    // so that a parser keeping comments in its ASG sees the source text.
+    if (delimiterStack.top?.kind === 'comment') {
+      emit(text, src);
+      return;
+    }
+
+    // Directives remain recognized inside the other opaque regions (write
+    // barrier, not a read barrier).
     const directive = parseDirectiveLine(text);
     if (directive) {
       if (directive.escaped) {
