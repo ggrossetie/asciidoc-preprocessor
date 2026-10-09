@@ -10,12 +10,12 @@ Every claim below is **measured, not assumed**. Each example is a case of the co
 
 | | Number of cases |
 |---|---|
-| Cases in the corpus | **75** |
-| Rendered output identical to Ruby Asciidoctor | **53** |
-| Rendered output different from Ruby Asciidoctor | **22**, in 8 families (§4) |
+| Cases in the corpus | **81** |
+| Rendered output identical to Ruby Asciidoctor | **60** |
+| Rendered output different from Ruby Asciidoctor | **21**, in 7 families (§4) |
 | Cases where Asciidoctor.js differs from Ruby Asciidoctor | **2** (`ifeval`, §4.9) |
 
-The 22 differences break down as follows:
+The 21 differences break down as follows:
 
 | Family | Cases | Nature | Who is "right"? |
 |---|---|---|---|
@@ -24,14 +24,15 @@ The 22 differences break down as follows:
 | 4.3 Attribute name grammar | C1 | stricter spec | debatable (compatibility vs. rigor) |
 | 4.4 Substitutions applied to values | C2 C3 F6 | simpler spec | the transducer (Asciidoctor HTML-escapes file paths) |
 | 4.5 Directive in a value continuation line | C12 | simpler spec | debatable, marginal |
-| 4.6 Directives in a `////` comment block | D9 (+ G13) | **the spec departs from Asciidoctor** | **Asciidoctor**: the spec should be amended |
 | 4.7 Included non-AsciiDoc content | G5 | spec rule (§2) | the transducer |
 | 4.8 Asciidoctor bugs not reproduced | D6 G4 G7 | fixes | the transducer |
 | 4.10 Setext title | F5 | scope reduction (§1) | Asciidoctor |
 
+One former difference has been **resolved**: directives in `////` comment blocks (D9, G13). The spec now makes comment regions inert, as Asciidoctor does (§4.6).
+
 The transducer also brings differences outside the rendered output (§5): exact provenance, D2/D3 diagnostics, a preprocessor usable on its own, linear cost.
 
-**Overall reading.** On a document that is "conforming" in the sense of the spec (§6), both models produce the same result. The differences concentrate where Asciidoctor's behavior depends on the parser's look-ahead, which is unpredictable and cannot be specified. Only one difference clearly argues **against the spec as written**: directives in comment blocks (§4.6). It can be fixed with a simple lexical rule (§7).
+**Overall reading.** On a document that is "conforming" in the sense of the spec (§6), both models produce the same result. The differences concentrate where Asciidoctor's behavior depends on the parser's look-ahead, which is unpredictable and cannot be specified. The only difference that argued **against the spec as written**, directives evaluated in comment blocks, has been fixed by a simple lexical rule: comment regions are inert (§4.6).
 
 ---
 
@@ -46,7 +47,7 @@ The comparison is done on the **rendered text** (HTML with tags removed, whitesp
 
 ### What was completed in the implementation to make the comparison fair
 
-Before this work, several differences came from **gaps in the implementation**, not from the model. They would have polluted the comparison. Here is what was fixed, step by step (180 tests in total):
+Before this work, several differences came from **gaps in the implementation**, not from the model. They would have polluted the comparison. Here is what was fixed, step by step (188 tests in total):
 
 1. **Output contract conforming to the spec (§2, §5)**: attribute entry lines stay in the output stream. Before, they were removed, and the downstream parser lost the document attribute state (`{flag}` no longer substituted).
 2. **Line normalization** as in Asciidoctor: CRLF, BOM, trailing whitespace stripped. Before, `----␠` was not recognized as a delimiter.
@@ -60,10 +61,11 @@ Before this work, several differences came from **gaps in the implementation**, 
 10. **Delimiters**: `|====` tables (any number of `=` ≥ 3), fenced ```` ``` ```` blocks, `++++` passthrough. The latter was left open in Appendix C; it is settled by observation (case B3).
 11. **Complete `include`**: `lines=`, `tag=`/`tags=` (with `*`, `**`, `!`), `indent=`, `leveloffset=`, `opts=optional`, attribute references in the target and the attribute list, the `attribute-missing` policy, `max-include-depth`, `safe`/`secure` modes, URIs gated by `allow-uri-read`, non-AsciiDoc content not preprocessed, cycle detection by resolved path.
 12. **D3 in both directions**: a unit that leaves a block open, or that closes a block it did not open, is reported.
+13. **Inert comment regions** (recommendation 1 of §7, now applied to the spec §4): inside `////`, no directive is evaluated and lines are emitted verbatim.
 
 ---
 
-## 3. What is identical (53 cases)
+## 3. What is identical (60 cases)
 
 These behaviors are **reproduced identically**. They are the compatibility baseline of the model.
 
@@ -71,10 +73,11 @@ These behaviors are **reproduced identically**. They are the compatibility basel
 - **AsciiDoc table cells** (A9, Appendix A.3): the entry stays local to the cell, a directive in the table reads the pre-table state, and `{cellattr}` is substituted in the cell. The transducer gets this result without any notion of cells, through the write barrier of the opaque region.
 - **Opaque regions**: listing, passthrough, fenced, plain table cell (B2, B3, B4, B6). A delimiter inside a paragraph also gives the same result (B9).
 - **Value grammar**: soft, hard and legacy continuations, `pass:[]`, snapshot resolution, API locking and soft-set, `{set:…}` invisible to directives in both models, `{sp}` (C4 to C11).
-- **Conditionals**: `,`/`+` combinators, mismatched `endif`, single-line form containing an include or an entry, escaping, unterminated conditional, conditional spanning an include, trailing whitespace (D1 to D5, D7, D8, D10).
+- **Conditionals**: `,`/`+` combinators, mismatched `endif`, single-line form containing an include or an entry, escaping, unterminated conditional, conditional spanning an include, directive inside a comment block, trailing whitespace (D1 to D5, D7 to D10).
 - **`ifeval`**: integers vs. strings (`5 < 10` is true, `"5" < "10"` is false), intrinsic version, missing attribute, malformed expression (E1, E4 to E6).
 - **Intrinsic attributes and header**: backend, safe-mode, doctype in the header then in the body, multiple authors, revision (F1 to F4).
 - **Include**: `lines=`, `tag=`, `leveloffset=`, `indent=`, references in the attribute list, missing file, `optional`, `drop-line`, `secure` mode, URI without `allow-uri-read`, include in a comment, "header/footer" includes that open and close a block (G1 to G3, G6, G8 to G17, G19).
+- **Single-line comments** (I1 to I6): a line starting with `//` can never be a directive or an entry, since both are only recognized at column 0. It is passed through verbatim and the parser treats it as a comment, so no special rule is needed: it is inert by construction. `// endif::[]` does not close a conditional, and inside a false branch the comment line is dropped with the rest of the branch. A line comment may sit between the doctitle and the author line. `///` (three slashes) is neither a comment nor an entry: it is text. As with `////` blocks, the parser receives the comment text as written, which is what an ASG preserving comments needs. The only `//` lines with a preprocessing role are `// tag::name[]` / `// end::name[]` markers, and only in a file included with `tag=`/`tags=` (G2).
 - **Lines**: CRLF, front matter (H1, H2).
 
 ---
@@ -197,7 +200,7 @@ With `[source]`, the open block becomes a listing; with `[comment]`, it becomes 
 
 - **Advantages.** Recognition stays decidable line by line, with bounded state. That is what makes the preprocessor specifiable and usable on its own.
 - **Drawbacks.** This is the intrinsic limit of the lexical model: it does not know about blocks. B10 is the most troublesome, because `[comment]` on an open block is a real idiom. A document violating D1 loses the guarantee that the preprocessor state and the document state agree. Only the parser can diagnose D1 (spec §7: SHOULD).
-- **Mitigation.** Displayed text that looks like an entry should be escaped or placed in an opaque region anyway, which is what D1 requires. For B10, see the recommendation on comments in §7.
+- **Mitigation.** Displayed text that looks like an entry should be escaped or placed in an opaque region anyway, which is what D1 requires. B10 is the styled-block counterpart of §4.6: inert `////` regions are lexical, a `[comment]` style on `--` is not.
 
 ### 4.3 Attribute name grammar (C1)
 
@@ -263,7 +266,7 @@ Asciidoctor reads continuation lines **through the preprocessor**: the `ifdef` i
 
 - Marginal. The spec rule is simpler and respects "bounded state". It would only need to be written explicitly in the spec.
 
-### 4.6 Directives in a `////` comment block (D9, G13): **the spec departs from Asciidoctor**
+### 4.6 Directives in a `////` comment block (D9, G13): **resolved, comments are inert**
 
 ```asciidoc
 ////
@@ -273,13 +276,15 @@ ifdef::nope[]
 AFTER-COMMENT
 ```
 
-| Asciidoctor | Transducer (current spec §4) |
-|---|---|
-| `AFTER-COMMENT` | **empty document**, with the D2, D3 and `unterminated conditional` diagnostics |
+| Asciidoctor | Transducer, original spec §4 | Transducer, amended spec §4 |
+|---|---|---|
+| `AFTER-COMMENT` | **empty document**, with the D2, D3 and `unterminated conditional` diagnostics | `AFTER-COMMENT`, no diagnostic |
 
-Asciidoctor reads the content of a comment block with `skip_processing`, that is, **without evaluating directives**. Spec §4, on the contrary, makes opaque regions "write-only barriers" and keeps directives active, including inside `////`. In listings and tables this is essential (snippets, CSV). In comments it serves no purpose and is dangerous: commenting out a passage that contains an unbalanced `ifdef` makes the rest of the document disappear. Case G13 confirms it without any visible effect: for an `include::` in a comment, Asciidoctor does not read the file, while the transducer tries to read it and produces a spurious error.
+Asciidoctor reads the content of a comment block with `skip_processing`, that is, **without evaluating directives**. The original spec §4 made every opaque region a write-only barrier and kept directives active, including inside `////`. In listings and tables this is essential (snippets, CSV). In comments it served no purpose and was dangerous: commenting out a passage that contains an unbalanced `ifdef` made the rest of the document disappear. For an `include::` in a comment (G13), Asciidoctor does not read the file, while the transducer tried to read it and produced a spurious error.
 
-- **Recommendation**: amend §4 so that comment regions are **inert**, i.e. a barrier for reads *and* writes. The rule stays purely lexical and reproduces Asciidoctor (see §7).
+Spec §4 now makes comment regions **inert**: a barrier for reads *and* writes. Inside `////`, no directive, escaped directive or attribute entry is recognized; every line is emitted unchanged until the closing delimiter. A conditional that encloses the whole comment block still applies to it. The rule stays purely lexical and reproduces Asciidoctor; D9 and G13 are now identical.
+
+- **ASG.** Whether comment blocks should be kept in the ASG is under discussion. Inertness is the precondition that makes it useful: the comment node holds exactly what the author wrote (directive lines included, unevaluated), not a preprocessed variant in which an `include` would have been expanded into the comment or part of it suppressed by a conditional.
 
 ### 4.7 Included non-AsciiDoc content that looks like an entry (G5)
 
@@ -433,7 +438,7 @@ The transducer's messages reuse Asciidoctor's (malformed directive, mismatched, 
 | **Robustness** | Cycle detection, no escaped directive in a false branch, no synthetic entry in a listing (§4.8) | Bugs D6, G4, G7 |
 | **Composition** | D2/D3 diagnosed: each unit can be analyzed on its own | Conditionals and blocks can span files without any warning |
 | **Block awareness** | None: wrong when a block style changes its content model (`[source]--`, `[comment]--`) or on an entry outside a block boundary (D1) | Exact, since it is the parser |
-| **Strict compatibility** | 22 of 75 cases differ; they are edge cases, but some occur in practice (§4.2, §4.3, §4.6) | The reference, by definition |
+| **Strict compatibility** | 21 of 81 cases differ; they are edge cases, but some occur in practice (§4.2, §4.3) | The reference, by definition |
 | **Integration** | The interface must supply the intrinsic attributes (§5.5) | Built in |
 | **Values** | As written | HTML-escaped, even in paths (§4.4) |
 | **New warnings** | D2/D3 on patterns that work today (§5.2) | None |
@@ -444,7 +449,7 @@ The transducer's messages reuse Asciidoctor's (malformed directive, mismatched, 
 
 In order of importance:
 
-1. **Make comments inert (§4).** A region opened by `////` is a barrier **for reads and writes**: no directive is evaluated inside it. The rule is lexical, reproduces Asciidoctor, and removes the most dangerous defect of the current text (D9, G13). The `[comment]--` case (B10) remains out of reach and falls under D1.
+1. **Make comments inert (§4).** *Applied.* A region opened by `////` is a barrier **for reads and writes**: no directive is evaluated inside it and its lines are emitted verbatim. The rule is lexical, reproduces Asciidoctor, removes the most dangerous defect of the original text (D9, G13), and keeps comment content intact should comments be preserved in the ASG. The `[comment]--` case (B10) remains out of reach and falls under D1.
 2. **Standardize `ifeval`**: the `operand op operand` grammar, operand typing (string, nil, boolean, integer and float with "numeric prefix, otherwise 0" semantics), and the rule "incompatible comparison = false". This ends the Ruby/JS divergence (E2, E3). The misconception that `ifeval` evaluates Ruby should also be corrected.
 3. **Settle Appendix C for passthrough**: `++++` is opaque. This is Asciidoctor's observed behavior (B3). Also add fenced ```` ``` ```` blocks to the verbatim set, and allow any number of `=` (≥ 3) in table delimiters.
 4. **Write down the list of intrinsic attributes** the processor must supply as initial state (`backend-*`, `basebackend-*`, `doctype-*`, `safe-mode-*`, `asciidoctor-version`…), together with the rule that derived attributes are only updated **within the header** (F2, F3).
@@ -463,7 +468,7 @@ In order of importance:
 
 ```console
 npm install
-npm test             # 180 tests, including one per corpus case (verdicts locked against Asciidoctor.js)
+npm test             # 188 tests, including one per corpus case (verdicts locked against Asciidoctor.js)
 npm run compare      # regenerates compare/REPORT.md; adds a Ruby column if the asciidoctor gem is installed
 ```
 

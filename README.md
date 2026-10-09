@@ -97,7 +97,10 @@ passthrough (`++++`), comment (`////`), and table (`|===`, `,===`, `:===`,
 lines are not scanned for attribute entries — but directives
 (`ifdef`/`ifndef`/`ifeval`/`include`) remain recognized and still resolve
 against the state from before the region. **Opacity is a write barrier, not
-a read barrier.**
+a read barrier.** Comment regions are the exception: they are **inert**
+(a read barrier too). No directive is evaluated inside `////` and its lines
+are emitted verbatim, as Asciidoctor does, and so that a parser keeping
+comments in its ASG sees the text as written (case D9).
 
 Passthrough opacity, left open by the proposal (Appendix C), is settled
 here by observation: Asciidoctor never treats an entry-shaped line inside
@@ -168,10 +171,10 @@ output (it is total) — the guarantee is simply void, matching §6.
 
 [COMPARISON.md](COMPARISON.md) lists every difference with Asciidoctor,
 with examples, and weighs the advantages and drawbacks of each.
-[compare/REPORT.md](compare/REPORT.md) is the raw, generated evidence: 75
+[compare/REPORT.md](compare/REPORT.md) is the raw, generated evidence: 81
 cases run through Asciidoctor.js 4.0.7 and Asciidoctor (Ruby) 2.0.20 and
 through the transducer + the same parser. The rendered output is identical
-in 53 cases against Ruby Asciidoctor (51 against Asciidoctor.js, which
+in 60 cases against Ruby Asciidoctor (58 against Asciidoctor.js, which
 departs from Ruby in two `ifeval` corner cases); every case that differs
 is one of the departures analyzed in COMPARISON.md.
 

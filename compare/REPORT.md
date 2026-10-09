@@ -46,7 +46,7 @@ Each case is converted (1) by Asciidoctor directly and (2) by the transducer, wh
 | [D6](#d6) | conditionals | Escaped directive inside a false branch | different | different | same |
 | [D7](#d7) | conditionals | Unterminated conditional at end of document | same | same | same |
 | [D8](#d8) | conditionals | Conditional opened in an include, closed in the includer (D2 violation) | same | same | same |
-| [D9](#d9) | conditionals | Directive inside a comment block | different | different | same |
+| [D9](#d9) | conditionals | Directive inside a comment block | same | same | same |
 | [D10](#d10) | conditionals | Directive line with trailing whitespace | same | same | same |
 | [E1](#e1) | ifeval | Integers vs quoted strings: 5 < 10 but "5" > "10" | same | same | same |
 | [E2](#e2) | ifeval | Unquoted non-numeric value compared to 0 (Ruby to_i vs JS parseInt) | different | same | different |
@@ -79,6 +79,12 @@ Each case is converted (1) by Asciidoctor directly and (2) by the transducer, wh
 | [G17](#g17) | include | Entries from an included file take effect in expansion order | same | same | same |
 | [G18](#g18) | include | Include inside a list item continuation, the included file defines an attribute used right after | different | different | same |
 | [G19](#g19) | include | Source location of a warning inside a lines= selection | same | same | same |
+| [I1](#i1) | comments | Directive-shaped text after // is not a directive | same | same | same |
+| [I2](#i2) | comments | Entry-shaped text after // is not an entry | same | same | same |
+| [I3](#i3) | comments | Include-shaped text after // reads no file | same | same | same |
+| [I4](#i4) | comments | // endif::[] does not close a conditional; the comment is dropped with its false branch | same | same | same |
+| [I5](#i5) | comments | Line comment between the doctitle and the author line | same | same | same |
+| [I6](#i6) | comments | Three slashes (///) is neither a comment nor an entry | same | same | same |
 | [H1](#h1) | lines | CRLF line endings and trailing whitespace on a delimiter | same | same | same |
 | [H2](#h2) | lines | Front matter with skip-front-matter | same | same | same |
 
@@ -1596,7 +1602,7 @@ Transducer diagnostics: `warning: [D2] unbalanced conditional: 1 directive(s) op
 
 ### D9
 
-**Directive inside a comment block** (conditionals) — JS: different, Ruby: different
+**Directive inside a comment block** (conditionals) — JS: same, Ruby: same
 
 Source (`main.adoc`):
 
@@ -1618,15 +1624,17 @@ Transducer output (fed to the parser):
 
 ```
 ////
+ifdef::nope[]
+////
+
+AFTER-COMMENT
 ```
 
 Transducer + parser rendered text:
 
 ```
-(empty)
+AFTER-COMMENT
 ```
-
-Transducer diagnostics: `warning: [D2] unbalanced conditional: 1 directive(s) opened in this include unit are still open at its end`, `warning: [D3] unbalanced delimiter: 1 delimited block(s) opened in this include unit are still open at its end`, `error: [unterminated-conditional] detected unterminated preprocessor conditional directive: ifdef::nope[]`
 
 ### D10
 
@@ -2681,7 +2689,7 @@ Transducer output (fed to the parser):
 
 ```
 ////
-Unresolved directive in <stdin> - include::missing.adoc[]
+include::missing.adoc[]
 ////
 
 AFTER
@@ -2692,8 +2700,6 @@ Transducer + parser rendered text:
 ```
 AFTER
 ```
-
-Transducer diagnostics: `error: [include-missing] include file not found: missing.adoc (<stdin>:2)`
 
 ### G14
 
@@ -2963,6 +2969,198 @@ unterminated listing
 ```
 
 Transducer diagnostics: `warning: [D3] unbalanced delimiter: 1 delimited block(s) opened in this include unit are still open at its end`, `warning: [D3] unbalanced delimiter: 1 delimited block(s) opened in this include unit are still open at its end`
+
+### I1
+
+**Directive-shaped text after // is not a directive** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+// ifdef::nope[]
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+// ifdef::nope[]
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+AFTER
+```
+
+### I2
+
+**Entry-shaped text after // is not an entry** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+// :x: 1
+
+ifdef::x[X-SET]
+```
+
+Asciidoctor.js rendered text:
+
+```
+(empty)
+```
+
+Transducer output (fed to the parser):
+
+```
+// :x: 1
+
+```
+
+Transducer + parser rendered text:
+
+```
+(empty)
+```
+
+### I3
+
+**Include-shaped text after // reads no file** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+// include::missing.adoc[]
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+// include::missing.adoc[]
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+AFTER
+```
+
+### I4
+
+**// endif::[] does not close a conditional; the comment is dropped with its false branch** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+ifdef::nope[]
+// endif::[]
+HIDDEN
+endif::[]
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+AFTER
+```
+
+### I5
+
+**Line comment between the doctitle and the author line** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+= Title
+// comment
+Jane Doe
+
+ifeval::["{author}" == "Jane Doe"]
+AUTHOR-OK
+endif::[]
+```
+
+Asciidoctor.js rendered text:
+
+```
+AUTHOR-OK
+```
+
+Transducer output (fed to the parser):
+
+```
+= Title
+// comment
+Jane Doe
+
+AUTHOR-OK
+```
+
+Transducer + parser rendered text:
+
+```
+AUTHOR-OK
+```
+
+### I6
+
+**Three slashes (///) is neither a comment nor an entry** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+/// :x: 1
+
+ifdef::x[X-SET]
+```
+
+Asciidoctor.js rendered text:
+
+```
+/// :x: 1
+```
+
+Transducer output (fed to the parser):
+
+```
+/// :x: 1
+
+```
+
+Transducer + parser rendered text:
+
+```
+/// :x: 1
+```
 
 ### H1
 

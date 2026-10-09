@@ -309,7 +309,7 @@ export const cases = [
     category: 'conditionals',
     title: 'Directive inside a comment block',
     src: doc('////', 'ifdef::nope[]', '////', '', 'AFTER-COMMENT'),
-    expect: 'different',
+    expect: 'same',
   },
   {
     id: 'D10',
@@ -555,6 +555,50 @@ export const cases = [
     title: 'Source location of a warning inside a lines= selection',
     src: doc('include::doc.adoc[lines=1;6..8]'),
     files: { 'doc.adoc': 'first\nskipped\nskipped\nskipped\nskipped\n\n----\nunterminated listing\n' },
+    expect: 'same',
+  },
+
+  // ── I. Single-line comments (// ...) ────────────────────────────────
+  {
+    id: 'I1',
+    category: 'comments',
+    title: 'Directive-shaped text after // is not a directive',
+    src: doc('// ifdef::nope[]', 'AFTER'),
+    expect: 'same',
+  },
+  {
+    id: 'I2',
+    category: 'comments',
+    title: 'Entry-shaped text after // is not an entry',
+    src: doc('// :x: 1', '', 'ifdef::x[X-SET]'),
+    expect: 'same',
+  },
+  {
+    id: 'I3',
+    category: 'comments',
+    title: 'Include-shaped text after // reads no file',
+    src: doc('// include::missing.adoc[]', 'AFTER'),
+    expect: 'same',
+  },
+  {
+    id: 'I4',
+    category: 'comments',
+    title: '// endif::[] does not close a conditional; the comment is dropped with its false branch',
+    src: doc('ifdef::nope[]', '// endif::[]', 'HIDDEN', 'endif::[]', 'AFTER'),
+    expect: 'same',
+  },
+  {
+    id: 'I5',
+    category: 'comments',
+    title: 'Line comment between the doctitle and the author line',
+    src: doc('= Title', '// comment', 'Jane Doe', '', 'ifeval::["{author}" == "Jane Doe"]', 'AUTHOR-OK', 'endif::[]'),
+    expect: 'same',
+  },
+  {
+    id: 'I6',
+    category: 'comments',
+    title: 'Three slashes (///) is neither a comment nor an entry',
+    src: doc('/// :x: 1', '', 'ifdef::x[X-SET]'),
     expect: 'same',
   },
 
