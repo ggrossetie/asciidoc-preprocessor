@@ -7,7 +7,8 @@
   "scripts": {
     "test": "node --test 'test/**/*.test.js'",
     "test:unit": "node --test 'test/unit/**/*.test.js'",
-    "test:comparison": "node --test 'test/comparison/**/*.test.js'"
+    "test:comparison": "node --test 'test/comparison/**/*.test.js'",
+    "compare": "node compare/report.js"
   },
   "keywords": [
     "asciidoc",
