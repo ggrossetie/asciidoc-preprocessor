@@ -18,6 +18,14 @@ test('soft-set seeded attributes are overridable', () => {
   assert.equal(state.get('foo'), 'baz');
 });
 
+test('a seeded null is a locked unset (API "name!"): a body entry cannot define it', () => {
+  const state = new AttributeState({ foo: null });
+  assert.equal(state.has('foo'), false);
+  assert.equal(state.set('foo', 'x'), false);
+  assert.equal(state.has('foo'), false);
+  assert.deepEqual(state.snapshot(), {});
+});
+
 test('names are normalized to lowercase', () => {
   const state = new AttributeState();
   state.set('Foo-Bar', '1');
@@ -38,6 +46,30 @@ test('resolveReferences substitutes known attributes eagerly, leaves unknown one
   state.set('name', 'World');
   assert.equal(state.resolveReferences('Hello, {name}!'), 'Hello, World!');
   assert.equal(state.resolveReferences('Hello, {missing}!'), 'Hello, {missing}!');
+});
+
+test('escaped references are unescaped, not resolved', () => {
+  const state = new AttributeState();
+  state.set('name', 'World');
+  assert.equal(state.resolveReferences('\\{name} {name\\}'), '{name} {name}');
+});
+
+test('intrinsic character references resolve but are not "defined"', () => {
+  const state = new AttributeState();
+  assert.equal(state.resolveReferences('a{sp}b{nbsp}'), 'a b&#160;');
+  assert.equal(state.has('sp'), false);
+});
+
+test('{set:...} and {counter:...} are parser-side: left untouched', () => {
+  const state = new AttributeState();
+  assert.equal(state.resolveReferences('{counter:n} {set:a:b}'), '{counter:n} {set:a:b}');
+});
+
+test('attribute-missing policies: skip, drop, drop-line', () => {
+  const state = new AttributeState();
+  assert.deepEqual(state.substitute('a {x} b', 'skip'), { text: 'a {x} b', missing: ['x'] });
+  assert.deepEqual(state.substitute('a {x} b', 'drop'), { text: 'a  b', missing: ['x'] });
+  assert.deepEqual(state.substitute('a {x} b', 'drop-line'), { text: null, missing: ['x'] });
 });
 
 test('resolution is a snapshot: a later set does not retroactively change an earlier resolution', () => {

@@ -2,114 +2,144 @@
 // (bounded context of §1). Directive lines remain recognized inside
 // opaque regions (§4) and are evaluated against the attribute state
 // accumulated so far.
+//
+// The stack discipline reproduces Asciidoctor's PreprocessorReader
+// (#preprocess_conditional_directive) exactly; what differs is only *when*
+// it runs (stream-clocked here, parser-clocked there).
 
-import { evaluateIfeval, IfevalSyntaxError } from './ifeval.js';
+import { evaluateIfeval, isIfevalExpression, IfevalSyntaxError } from './ifeval.js';
 
-const DIRECTIVE_LINE = /^(ifdef|ifndef|ifeval|endif)::([^[\]]*)\[(.*)\]$/;
-
-// Splits a "name1,name2" (OR) or "name1+name2" (AND) target into its
-// combinator and the list of names.
-function parseNames(target) {
-  if (target.includes(',') && target.includes('+')) return null; // mixing combinators is not recognized
-  if (target.includes('+')) return { combinator: 'and', names: target.split('+').map((s) => s.trim()) };
-  return { combinator: 'or', names: target.split(',').map((s) => s.trim()) };
-}
-
-function testDefined(names, combinator, attrState) {
-  const tests = names.map((n) => attrState.has(n));
-  return combinator === 'and' ? tests.every(Boolean) : tests.some(Boolean);
-}
+// Same shape as Asciidoctor's ConditionalDirectiveRx: an optional escaping
+// backslash, a target without spaces whose first "," or "+" decides the
+// combinator, and a non-empty optional bracket content.
+const DIRECTIVE_LINE = /^(\\)?(ifdef|ifndef|ifeval|endif)::(\S*?(?:([,+])\S*?)?)\[(.+)?\]$/;
 
 // Parses a directive line without consulting any state. Returns null if
 // the line is not directive-shaped.
 export function parseDirectiveLine(line) {
   const m = DIRECTIVE_LINE.exec(line);
   if (!m) return null;
-  const [, type, target, content] = m;
-  return { type, target: target.trim(), content };
+  const [, escaped, type, target, delimiter, content] = m;
+  return { escaped: Boolean(escaped), type, target, delimiter: delimiter ?? null, content: content ?? '' };
 }
+
+function testDefined(target, delimiter, attrState) {
+  if (delimiter === ',') return target.split(',').some((n) => attrState.has(n));
+  if (delimiter === '+') return target.split('+').every((n) => attrState.has(n));
+  return attrState.has(target);
+}
+
+const directiveText = ({ type, target, content }) => `${type}::${target}[${content}]`;
 
 export class ConditionalStack {
   constructor() {
-    this._stack = []; // { active, names, type }
+    this._stack = []; // { type, target, expr, skip, skipping }
+    this._skipping = false;
   }
 
   get suppressed() {
-    return this._stack.some((frame) => !frame.active);
+    return this._skipping;
   }
 
   get depth() {
     return this._stack.length;
   }
 
-  // Resets bookkeeping used to detect D2 violations at the end of an
-  // include unit, without losing the ambient (possibly suppressed) state
-  // inherited from the parent unit.
+  // Records the depth at the start of an include unit, without losing the
+  // ambient (possibly suppressed) state inherited from the parent unit.
   markUnitStart() {
     return this._stack.length;
   }
 
   // Returns diagnostics for D2 ("conditionals MUST be balanced within
   // each include unit") given the depth recorded by markUnitStart().
+  // Asciidoctor itself only reports conditionals still open at the end of
+  // the whole document ("detected unterminated preprocessor conditional
+  // directive"); a conditional spanning include units is legal there.
   checkUnitEnd(startDepth) {
-    if (this._stack.length === startDepth) return [];
+    if (this._stack.length <= startDepth) return [];
     return [
       {
         rule: 'D2',
+        severity: 'warning',
         message: `unbalanced conditional: ${this._stack.length - startDepth} directive(s) opened in this include unit are still open at its end`,
       },
     ];
   }
 
-  // Consumes one directive occurrence. Returns:
-  //   { kind: 'block' }                     - ifdef/ifndef/ifeval[] block form, or endif
-  //   { kind: 'inline', text }               - ifdef/ifndef[text] single-line form, condition true
-  //   { kind: 'inline-drop' }                - single-line form, condition false
-  //   { kind: 'error', diagnostics: [...] }  - malformed directive (still consumed; total transducer)
+  // Asciidoctor-compatible end-of-document report.
+  checkDocumentEnd() {
+    return this._stack.map((f) => ({
+      rule: 'unterminated-conditional',
+      severity: 'error',
+      message: `detected unterminated preprocessor conditional directive: ${f.type}::${f.target ?? ''}[${f.expr ?? ''}]`,
+    }));
+  }
+
+  // Consumes one (unescaped) directive occurrence. Returns:
+  //   { kind: 'consumed' }                   - the directive line produces no output
+  //   { kind: 'inline', text }               - single-line form, condition true: the
+  //                                            line is *replaced* by text, which the
+  //                                            caller feeds back into the stream
+  //   { kind: 'error', diagnostics: [...] }  - malformed / unmatched directive (still
+  //                                            consumed; the transducer is total)
   process(directive, attrState) {
-    const { type, target, content } = directive;
+    const { type, content } = directive;
+    const noTarget = directive.target === '';
+    const target = directive.target.toLowerCase();
 
     if (type === 'endif') {
-      if (this._stack.length === 0) {
-        return { kind: 'error', diagnostics: [{ rule: 'D2', message: 'endif with no matching ifdef/ifndef/ifeval' }] };
+      if (content) return error('directive', `malformed preprocessor directive - text not permitted: ${directiveText(directive)}`);
+      if (this._stack.length === 0) return error('D2', `unmatched preprocessor directive: endif::${target}[]`);
+      const top = this._stack[this._stack.length - 1];
+      if (!noTarget && target !== top.target) {
+        // Asciidoctor does not pop on a mismatch: the open conditional stays open.
+        return error('D2', `mismatched preprocessor directive: endif::${target}[], expected endif::${top.target ?? ''}[]`);
       }
-      const frame = this._stack.pop();
-      if (target && !frame.names.includes(target)) {
-        return {
-          kind: 'error',
-          diagnostics: [{ rule: 'D2', message: `endif::${target}[] does not match innermost open conditional (${frame.names.join(',')})` }],
-        };
+      this._stack.pop();
+      this._skipping = this._stack.length === 0 ? false : this._stack[this._stack.length - 1].skipping;
+      return { kind: 'consumed' };
+    }
+
+    let skip;
+    if (this._skipping) {
+      // Inside a false branch only nesting is tracked; nothing is evaluated.
+      if (type === 'ifeval') {
+        if (!(noTarget && content && isIfevalExpression(content))) return { kind: 'consumed' };
+      } else if (noTarget) {
+        return { kind: 'consumed' };
       }
-      return { kind: 'block' };
+      skip = false;
+    } else if (type === 'ifeval') {
+      if (!noTarget) return error('directive', `malformed preprocessor directive - target not permitted: ${directiveText(directive)}`);
+      if (!content) return error('directive', 'malformed preprocessor directive - missing expression: ifeval::[]');
+      try {
+        skip = !evaluateIfeval(content, attrState);
+      } catch (err) {
+        if (!(err instanceof IfevalSyntaxError)) throw err;
+        return error('directive', err.message);
+      }
+    } else {
+      if (noTarget) return error('directive', `malformed preprocessor directive - missing target: ${type}::[${content}]`);
+      const defined = testDefined(target, directive.delimiter, attrState);
+      skip = type === 'ifdef' ? !defined : defined;
     }
 
     if (type === 'ifeval') {
-      if (target !== '') return { kind: 'error', diagnostics: [{ rule: 'D4', message: 'ifeval:: does not take a target' }] };
-      let active;
-      try {
-        active = evaluateIfeval(attrState.resolveReferences(content));
-      } catch (err) {
-        if (!(err instanceof IfevalSyntaxError)) throw err;
-        return { kind: 'error', diagnostics: [{ rule: 'D4', message: err.message }] };
-      }
-      this._stack.push({ active, names: [], type });
-      return { kind: 'block' };
+      if (skip) this._skipping = true;
+      this._stack.push({ type, target: null, expr: content, skip, skipping: this._skipping });
+      return { kind: 'consumed' };
     }
-
-    // ifdef / ifndef
-    const parsed = parseNames(target);
-    if (!parsed) {
-      return { kind: 'error', diagnostics: [{ rule: 'D4', message: `cannot mix "," and "+" in ${type}::${target}[]` }] };
+    if (content) {
+      // Single-line form: no frame; the text replaces the directive line.
+      return !this._skipping && !skip ? { kind: 'inline', text: content.trimEnd() } : { kind: 'consumed' };
     }
-    const defined = testDefined(parsed.names, parsed.combinator, attrState);
-    const holds = type === 'ifdef' ? defined : !defined;
-
-    if (content === '') {
-      // block form
-      this._stack.push({ active: holds, names: parsed.names, type });
-      return { kind: 'block' };
-    }
-    // single-line form: no stack frame, evaluated (and resolved) immediately
-    return holds ? { kind: 'inline', text: attrState.resolveReferences(content) } : { kind: 'inline-drop' };
+    if (skip) this._skipping = true;
+    this._stack.push({ type, target, expr: null, skip, skipping: this._skipping });
+    return { kind: 'consumed' };
   }
+}
+
+function error(rule, message) {
+  return { kind: 'error', diagnostics: [{ rule, severity: 'error', message }] };
 }

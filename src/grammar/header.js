@@ -1,55 +1,114 @@
 // The document header mini-grammar (§2): doctitle, author, and revision
 // lines, each line-oriented and unnested, recognized by position via a
-// header-mode flag carried in the bounded context (see Transducer's
+// header-mode flag carried in the bounded context (see the transducer's
 // `headerState`). This assigns the implicit attributes those lines define,
 // subject to the locked rule.
 //
-// Scope note: this is a deliberately reduced subset of Asciidoctor's full
-// author/revision grammar (single author, no author-list `;` separator,
-// simplified revision line) — enough to demonstrate that header
-// recognition is lexical (decidable by line shape + position), not a
-// claim of full compatibility. See README.
+// The author and revision grammars are ported from Asciidoctor
+// (AuthorInfoLineRx, AuthorDelimiterRx, RevisionInfoLineRx,
+// Parser.process_authors) so the implicit attributes match.
+//
+// Scope note: the setext (two-line, underlined) doctitle form is not
+// recognized: deciding it needs one line of look-ahead, which §1 excludes.
 
-const DOCTITLE_LINE = /^= (\S.*)$/;
-const REVISION_LINE = /^v(\S+)(?:,\s*([^:]+?))?(?:\s*:\s*(.+))?$/;
+const DOCTITLE_LINE = /^= +(\S.*?)\s*$/;
+const AUTHOR_INFO_LINE =
+  /^([\p{L}\p{N}_][\p{L}\p{N}_\-'.]*)(?: +([\p{L}\p{N}_][\p{L}\p{N}_\-'.]*))?(?: +([\p{L}\p{N}_][\p{L}\p{N}_\-'.]*))?(?: +<([^>]+)>)?$/u;
+const AUTHOR_DELIMITER = /;(?: |$)/;
+const REVISION_INFO_LINE = /^(?:[^\d{]*(.*?),)? *(?!:)(.*?)(?: *(?!^),?: *(.*))?$/;
+const AUTHOR_KEYS = ['author', 'authorinitials', 'firstname', 'middlename', 'lastname', 'email'];
 
 export function matchDoctitleLine(line) {
   const m = DOCTITLE_LINE.exec(line);
   return m ? { doctitle: m[1] } : null;
 }
 
-// Lines that are themselves recognized by another lexical rule (an
-// attr-entry, a directive) are never mistaken for a header line — a
-// header slot only claims a line that doesn't already belong to a more
-// specific grammar.
-const LOOKS_LIKE_OTHER_GRAMMAR = /^:|^(ifdef|ifndef|ifeval|endif|include)::/;
+// Port of Asciidoctor's Parser.process_authors. With namesOnly, each entry
+// is a plain name (as given by an `:author:` / `:authors:` entry), not an
+// author-info line with an optional <email>.
+export function processAuthors(authorLine, { namesOnly = false, multiple = true } = {}) {
+  const meta = {};
+  const entries = multiple && authorLine.includes(';') ? authorLine.split(AUTHOR_DELIMITER) : [authorLine];
+  let idx = 0;
+  for (const entry of entries) {
+    if (entry === '') continue;
+    idx++;
+    const key = (k) => (idx === 1 ? k : `${k}_${idx}`);
 
-export function matchAuthorLine(line) {
-  if (line.trim() === '' || LOOKS_LIKE_OTHER_GRAMMAR.test(line)) return null;
-  const m = /^(.*?)(?:\s*<([^>]+)>)?$/.exec(line);
-  if (!m) return null;
-  const [, namePart, email] = m;
-  const names = namePart.trim().split(/\s+/).filter(Boolean);
-  if (names.length === 0) return null;
-  const [firstname, ...rest] = names;
-  const lastname = rest.length > 0 ? rest[rest.length - 1] : undefined;
-  const middlename = rest.length > 1 ? rest.slice(0, -1).join(' ') : undefined;
-  const author = names.join(' ');
-  const initials = [firstname, middlename, lastname].filter(Boolean).map((n) => n[0].toUpperCase()).join('');
-  const attrs = { author, firstname, authorinitials: initials };
-  if (middlename) attrs.middlename = middlename;
-  if (lastname) attrs.lastname = lastname;
-  if (email) attrs.email = email;
-  return attrs;
+    let segments = null;
+    if (namesOnly) {
+      let clean = entry;
+      if (entry.includes('<')) {
+        meta[key('author')] = entry.replace(/_/g, ' ');
+        clean = entry.replace(/<[^>]+>/g, '');
+      }
+      const parts = clean.split(/\s+/).filter(Boolean);
+      segments = parts.length > 3 ? [...parts.slice(0, 2), parts.slice(2).join(' ')] : parts;
+    } else {
+      const m = AUTHOR_INFO_LINE.exec(entry);
+      if (m) segments = m.slice(1);
+    }
+
+    if (segments && segments.length > 0) {
+      const fname = segments[0].replace(/_/g, ' ');
+      meta[key('firstname')] = fname;
+      meta[key('authorinitials')] = fname[0];
+      let author = fname;
+      if (segments[1]) {
+        if (segments[2]) {
+          const mname = segments[1].replace(/_/g, ' ');
+          const lname = segments[2].replace(/_/g, ' ');
+          meta[key('middlename')] = mname;
+          meta[key('lastname')] = lname;
+          author = `${fname} ${mname} ${lname}`;
+          meta[key('authorinitials')] = `${fname[0]}${mname[0]}${lname[0]}`;
+        } else {
+          const lname = segments[1].replace(/_/g, ' ');
+          meta[key('lastname')] = lname;
+          author = `${fname} ${lname}`;
+          meta[key('authorinitials')] = `${fname[0]}${lname[0]}`;
+        }
+      }
+      meta[key('author')] ??= author;
+      if (!namesOnly && segments[3]) meta[key('email')] = segments[3];
+    } else {
+      const author = entry.replace(/ {2,}/g, ' ').trim();
+      meta[key('author')] = author;
+      meta[key('firstname')] = author;
+      meta[key('authorinitials')] = author[0];
+    }
+
+    if (idx === 1) {
+      meta.authors = meta[key('author')];
+    } else {
+      if (idx === 2) for (const k of AUTHOR_KEYS) if (k in meta) meta[`${k}_1`] = meta[k];
+      meta.authors = `${meta.authors}, ${meta[key('author')]}`;
+    }
+  }
+  meta.authorcount = String(idx);
+  return meta;
 }
 
+// The author line is whatever non-empty line follows the doctitle (and
+// any attribute entries / comments in between): Asciidoctor does not
+// require it to look like a name.
+export function matchAuthorLine(line) {
+  if (line.trim() === '') return null;
+  return processAuthors(line);
+}
+
+// The revision line is whatever non-empty line follows the author line,
+// provided it matches RevisionInfoLineRx (which almost any line does).
 export function matchRevisionLine(line) {
-  if (LOOKS_LIKE_OTHER_GRAMMAR.test(line)) return null;
-  const m = REVISION_LINE.exec(line);
+  const m = REVISION_INFO_LINE.exec(line);
   if (!m) return null;
-  const [, revnumber, revdate, revremark] = m;
-  const attrs = { revnumber };
-  if (revdate) attrs.revdate = revdate.trim();
-  if (revremark) attrs.revremark = revremark.trim();
+  const attrs = {};
+  if (m[1]) attrs.revnumber = m[1].trimEnd();
+  const component = (m[2] ?? '').trim();
+  if (component !== '') {
+    if (!m[1] && component.startsWith('v')) attrs.revnumber = component.slice(1);
+    else attrs.revdate = component;
+  }
+  if (m[3]) attrs.revremark = m[3].trimEnd();
   return attrs;
 }

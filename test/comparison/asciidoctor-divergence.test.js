@@ -91,7 +91,8 @@ test('Appendix A.3 — the transducer: table opacity (§4) reproduces the same t
 test('agreement on a conforming document: transducer output and Asciidoctor rendering are consistent', async () => {
   const src = [':release: 2.0', '', 'ifdef::release[Released: {release}]', ''].join('\n');
   const result = transduce(src);
-  assert.deepEqual(result.lines, ['', 'Released: 2.0']);
+  // The single-line form emits its text verbatim; {release} is substituted by the parser, as in Asciidoctor.
+  assert.deepEqual(result.lines, [':release: 2.0', '', 'Released: {release}']);
 
   const html = await asciidoctor.convert(src, { safe: 'unsafe' });
   assert.ok(html.includes('Released: 2.0'));

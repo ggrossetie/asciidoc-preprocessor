@@ -54,3 +54,32 @@ test('D3: a balanced unit reports no diagnostics', () => {
   stack.observe('----');
   assert.deepEqual(stack.checkUnitEnd(start), []);
 });
+
+test('table delimiters may have more than three "="', () => {
+  const stack = new DelimiterStack();
+  stack.observe('|=====');
+  assert.equal(stack.isOpen, true);
+  stack.observe('|===');
+  assert.equal(stack.isOpen, true, 'closer must match exactly');
+  stack.observe('|=====');
+  assert.equal(stack.isOpen, false);
+});
+
+test('fenced code (```lang) is a verbatim region closed by a bare ```', () => {
+  const stack = new DelimiterStack();
+  stack.observe('```ruby');
+  assert.equal(stack.top.kind, 'verbatim');
+  stack.observe('```');
+  assert.equal(stack.isOpen, false);
+});
+
+test('passthrough (++++) is opaque', () => {
+  const stack = new DelimiterStack();
+  stack.observe('++++');
+  assert.equal(stack.top.kind, 'passthrough');
+});
+
+test('D3: a unit closing a block it did not open is reported', () => {
+  const stack = new DelimiterStack();
+  assert.equal(stack.checkUnitEnd(0, 1)[0].rule, 'D3');
+});
