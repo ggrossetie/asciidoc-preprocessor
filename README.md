@@ -24,23 +24,48 @@ strategy, not the semantics — unlike the reference implementation, where
 directive evaluation timing is a function of the parser's look-ahead
 distance (see "Findings" below).
 
+
 ## Layout
 
 ```
 src/
-  attribute-state.js       the attribute state (§2): name -> {value, locked}
+  attribute-state.js        the attribute state (§2): name -> {value, locked}
+  intrinsic-attributes.js   seed state a processor supplies (backend-*, doctype-*, safe-mode-*, ...)
   transducer.js             the orchestrator: single left-to-right pass, provenance, diagnostics
   grammar/
-    attr-entry.js            attr-entry line grammar + value-continuation folding (§3)
-    header.js                 doctitle / author / revision mini-grammar (§2)
-    delimiters.js             open-delimiter stack, opaque regions (§4)
-    conditionals.js           ifdef / ifndef / ifeval / endif, the conditional stack
-    ifeval.js                 minimal safe comparison-expression evaluator
-    include.js                include::target[attrlist] recognition
+    attr-entry.js           attr-entry line grammar + value-continuation folding (§3)
+    header.js               doctitle / author / revision mini-grammar (§2)
+    delimiters.js           open-delimiter stack, opaque regions (§4)
+    conditionals.js         ifdef / ifndef / ifeval / endif, the conditional stack
+    ifeval.js               the ifeval comparison grammar (as in Asciidoctor)
+    include.js              include::target[attrlist], lines= / tag(s)= / indent=
+compare/
+  cases.js                  the comparison corpus (one observable behavior per case)
+  harness.js                runs a case through Asciidoctor and through transducer + Asciidoctor
+  report.js                 generates compare/REPORT.md
+  REPORT.md                 generated: every case, side by side
 test/
-  unit/                      one file per grammar rule / module
-  comparison/                the same reproducible examples run against real Asciidoctor.js
+  unit/                     one file per grammar rule / module
+  comparison/               the Appendix A examples + the whole corpus against real Asciidoctor.js
+COMPARISON.md               analysis of every difference with Asciidoctor
 ```
+
+## Output contract
+
+`transduce(input, options)` returns `{ lines, text, provenance, attributes,
+diagnostics }`. Attribute entry lines (and their continuation lines) stay in
+the output: the parser consumes them too and keeps its own document
+attribute state (§5). Directive lines never reach the output; the
+single-line form `ifdef::x[text]` is *replaced* by `text`, which is then
+processed like any other line (it may be an include or an attribute entry,
+as in Asciidoctor). Escaped directives (`\ifdef::…`, `\include::…`) are
+emitted without their backslash.
+
+Options: `attributes` (seed state; a plain value is locked, `{ value, soft:
+true }` is soft, `null` is a locked unset — see `intrinsicAttributes()` for
+the attributes Asciidoctor seeds), `safe` (`unsafe` by default, `safe`,
+`server`, `secure`), `baseDir`, and `readInclude(target, fromFile, attrs)`
+to resolve include targets (the include-processor extension point).
 
 ## The attribute-entry grammar
 
@@ -52,53 +77,63 @@ sp         = 1*( SP / HTAB )
 value      = <rest of line; may wrap>
 ```
 
-Values may wrap across lines with the soft (`SP \`) and hard (`SP + SP \`)
-wrap markers. Soft-wrap folding joins with a single space; hard-wrap folding
-retains the `+` in the value and joins with a newline (so that, once
-substituted into body text, it reproduces AsciiDoc's own hard-line-break
-syntax). Both are decided by a bounded value-continuation flag, so folding
-stays lexical (§1).
+Values may wrap across lines with the soft (`SP \`), hard (`SP + SP \`),
+and legacy (`SP +`) markers, with Asciidoctor's folding rules: each
+continuation line must repeat the first line's marker to keep the value
+open, a hard wrap joins with a newline and keeps the `+`, and an empty line
+ends the value. `pass:[…]` values are unwrapped.
 
 Attribute references (`{name}`) in the value resolve eagerly, at
 recognition time, against the state as it exists at that point in the
-stream — snapshot semantics, verified in
-[`attribute-state.test.js`](test/unit/attribute-state.test.js).
+stream — snapshot semantics. Escaped references (`\{name}`) and the
+character-replacement references (`{sp}`, `{nbsp}`, …) behave as in
+Asciidoctor; `{set:…}` and `{counter:…}` are parser-side and left alone.
 
 ## Opaque regions
 
-`DelimiterStack` tracks verbatim (`----`, `....`), comment (`////`), and
-table (`|===`, `,===`, `:===`, `!===`) delimiter lines. Inside an open
-region, lines are not scanned for attribute entries — but directives
+`DelimiterStack` tracks verbatim (`----`, `....`, and fenced ```` ``` ````),
+passthrough (`++++`), comment (`////`), and table (`|===`, `,===`, `:===`,
+`!===`, any number of `=` ≥ 3) delimiter lines. Inside an open region,
+lines are not scanned for attribute entries — but directives
 (`ifdef`/`ifndef`/`ifeval`/`include`) remain recognized and still resolve
 against the state from before the region. **Opacity is a write barrier, not
-a read barrier.** This is why an `include::` inside a listing block (a
-common pattern for pulling tagged snippets into example code) keeps
-working, while a `:name: value`-shaped line of *displayed* code inside that
-same listing does not pollute the document's attributes.
+a read barrier.**
+
+Passthrough opacity, left open by the proposal (Appendix C), is settled
+here by observation: Asciidoctor never treats an entry-shaped line inside
+`++++` as an entry (corpus case B3).
 
 Table opacity is not an approximation: an attribute entry inside an
 AsciiDoc table cell (`a|`) is scoped to the cell's own nested document and
-never reaches the document-level attribute state — true in Asciidoctor
-today (see `test/comparison`), and reproduced here by construction. The
-transducer needs no notion of cells, or of blocks within cells, to get this
-right.
+never reaches the document-level attribute state (case A9).
 
 ## Conditionals
 
-`ifdef`/`ifndef` support both the block form (`ifdef::name[]` … `endif::[]`)
-and the single-line form (`ifdef::name[Text]`, no `endif` needed — text is
-emitted verbatim if the condition holds, the whole line vanishes
-otherwise). Names may be combined with `,` (OR — any defined/undefined) or
-`+` (AND — all defined/undefined).
+The conditional stack reproduces Asciidoctor's `PreprocessorReader`
+exactly — block and single-line forms, `,` (OR) / `+` (AND) combinators
+(the first delimiter decides), `endif::target[]` matched against the full
+target, a mismatched `endif` reported without popping, malformed directives
+reported and dropped. What differs is only *when* the stack runs:
+stream-clocked here, parser-clocked there.
 
-`ifeval::[expr]` is always block form. **Scope reduction:** Asciidoctor
-evaluates the bracket content as an arbitrary Ruby expression; this
-transducer instead implements a small closed comparison grammar
-(`operand ("==")|("!=")|("<")|("<=")|(">")|(">=") operand`, numeric if both
-operands parse as numbers, string otherwise — see
-[`ifeval.js`](src/grammar/ifeval.js)). This is a deliberate scope reduction
-in service of the model's core claim (lexical, specifiable, no arbitrary
-code execution as part of a language grammar), not an oversight.
+`ifeval::[expr]` implements Asciidoctor's comparison grammar, not a subset
+of it: Asciidoctor does **not** evaluate Ruby (an earlier version of this
+README said so; that was wrong). Operands are typed exactly as
+`resolve_expr_val` does — quoted strings, `true`/`false`, empty as nil,
+integers and floats with Ruby's `to_i`/`to_f` — and incompatible
+comparisons are false (see [`ifeval.js`](src/grammar/ifeval.js)). On two
+corner cases Asciidoctor.js itself departs from Ruby Asciidoctor; the
+transducer follows Ruby (cases E2, E3).
+
+## Includes
+
+`lines=`, `tag=`/`tags=` (with `*`, `**`, `!`), `indent=`, `leveloffset=`,
+`opts=optional`, attribute references in the target and attribute list,
+`attribute-missing` handling, `max-include-depth`, safe modes (path jail in
+`safe`, links in `secure`), URI gating by `allow-uri-read`, and
+non-AsciiDoc content (not preprocessed, by file extension) all follow
+Asciidoctor. Provenance is exact per line, including inside a `lines=` or
+`tags=` selection.
 
 ## Document conformance (§6)
 
@@ -106,7 +141,7 @@ code execution as part of a language grammar), not an oversight.
 |------|-------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
 | D1   | Entry-shaped lines outside opaque regions sit at a block boundary | out of scope — requires the block model, which this project deliberately does not have                                           |
 | D2   | Conditionals balanced & nested within each include unit           | **diagnosed**, lexically, at end of unit (`ConditionalStack.checkUnitEnd`)                                                       |
-| D3   | Each include unit leaves the delimiter stack as it found it       | **diagnosed**, lexically, at end of unit (`DelimiterStack.checkUnitEnd`)                                                         |
+| D3   | Each include unit leaves the delimiter stack as it found it       | **diagnosed**, lexically, at end of unit, in both directions (left open / closed what it did not open)                          |
 | D4   | Directives rely only on transducer-reachable attributes           | satisfied by construction (directives only ever consult `AttributeState`) — no parser-set attributes exist for them to leak from |
 | D5   | Includes outside opaque regions sit at a block boundary           | out of scope — requires the block model                                                                                          |
 
@@ -116,51 +151,41 @@ portable output; agreement between the transducer's state and any
 compositionality. For a violating document, the transducer still produces
 output (it is total) — the guarantee is simply void, matching §6.
 
-## Other deliberate scope reductions
+## Remaining scope reductions
 
-- **Include filtering** (`lines=`, `tag(s)=`) is not implemented — an
-  `include::` always contributes the full referenced unit. This is
-  parser-orthogonal content selection, not part of what the model is
-  arguing for.
-- **The header mini-grammar** (doctitle/author/revision) is a reduced
-  subset: single author, no `;`-separated author list, a simplified
-  revision-line pattern. It exists to demonstrate that header recognition
-  is lexical (decidable by line shape + position), not to claim full
-  compatibility with Asciidoctor's author/revision parsing.
-- **Passthrough (`++++`) opacity** is left open, as it is in the proposal
-  itself (Appendix C).
+- **Setext doctitle** (`Title` underlined with `=`): needs one line of
+  look-ahead, which §1 excludes (case F5).
+- **Attribute value substitutions**: Asciidoctor applies the header
+  substitutions (special characters + attributes) to every entry value;
+  the transducer, per §3, only resolves attribute references (cases C2,
+  C3, F6).
+- **Lenient attribute names**: Asciidoctor accepts `:First Name:` and
+  sanitizes it to `firstname`; the spec grammar does not (case C1).
+- **Include `depth=` and `encoding=`**, URI fetching (delegated to
+  `readInclude`), and `max-attribute-value-size` are not implemented.
 
-## Findings: running the same examples against real Asciidoctor.js
+## Findings
 
-`test/comparison/asciidoctor-divergence.test.js` runs the proposal's own
-reproducible examples (Appendix A) through both this transducer and the
-`asciidoctor` npm package (Asciidoctor.js, core 2.0.26 as of this writing),
-and asserts on the actual observed behavior of each — not a description of
-it. Summary:
+[COMPARISON.md](COMPARISON.md) lists every difference with Asciidoctor,
+with examples, and weighs the advantages and drawbacks of each.
+[compare/REPORT.md](compare/REPORT.md) is the raw, generated evidence: 75
+cases run through Asciidoctor.js 4.0.7 and Asciidoctor (Ruby) 2.0.20 and
+through the transducer + the same parser. The rendered output is identical
+in 53 cases against Ruby Asciidoctor (51 against Asciidoctor.js, which
+departs from Ruby in two `ifeval` corner cases); every case that differs
+is one of the departures analyzed in COMPARISON.md.
 
-| Example                                                             | Asciidoctor (parser-clocked)                                                                                                                                                          | This transducer (stream-clocked)                                                                    |
-|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| `:flag: yes` + `ifdef::flag[...]` inside a list's look-ahead buffer | both conditionals **silently dropped**; `{flag}` still substitutes to `yes` elsewhere — the same attribute is simultaneously defined and undefined, depending which layer consults it | both conditionals **kept**, consistently, because the entry precedes them in the stream             |
-| the identical `:flag:`/`ifdef` pair outside a list                  | works                                                                                                                                                                                 | works (no special case needed — there was never a list to begin with)                               |
-| attribute entry inside an AsciiDoc table cell (`a\|`)               | never reaches document-level state; a directive in the table still reads pre-table state; the cell's own `{ref}` resolves via nested-document parsing                                 | identical outcome, reproduced by the opaque-region write barrier (§4) — no notion of cells required |
-| a conforming document with no list/table involved                   | agrees                                                                                                                                                                                | agrees                                                                                              |
-
-Run it yourself:
-
-```console
-npm run test:comparison
-```
-
-The point of these tests is not that Asciidoctor is "buggy" — the proposal
-argues (Appendix A.2) that the parser is behaving consistently on the
-stream it received; the defect is *when* the conditional was evaluated,
-which is exactly what the stream-clocked model pins down.
+The point is not that Asciidoctor is "buggy" — the proposal argues
+(Appendix A.2) that the parser is behaving consistently on the stream it
+received; the defect is *when* the conditional was evaluated, which is
+exactly what the stream-clocked model pins down.
 
 ## Running the tests
 
 ```console
 npm install
-npm test              # everything
+npm test                # everything
 npm run test:unit       # grammar/module-level tests only, no Asciidoctor dependency
-npm run test:comparison # the Appendix A examples against real Asciidoctor.js
+npm run test:comparison # the Appendix A examples + the corpus against real Asciidoctor.js
+npm run compare         # regenerate compare/REPORT.md (adds a Ruby column if the gem is installed)
 ```
