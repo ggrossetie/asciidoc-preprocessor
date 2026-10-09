@@ -2,7 +2,7 @@
 
 This document lists **every** observable difference between this project's preprocessor (an autonomous line transducer, see [SPEC.md](SPEC.md)) and Asciidoctor's (`PreprocessorReader`, interleaved with the parser). For each one, it gives a runnable example, the result on both sides, the cause, and the advantages and drawbacks.
 
-Every claim below is **measured, not assumed**. Each example is a case of the corpus in [`compare/cases.js`](compare/cases.js), identified by a code (A2, D9…). It was run against **Asciidoctor (Ruby) 2.0.20** and **Asciidoctor.js 4.0.7**. The raw details are in [`compare/REPORT.md`](compare/REPORT.md) (`npm run compare`). The verdict of each case is locked by `test/comparison/corpus.test.js`: if either side changes behavior, a test fails.
+Every claim below is **measured, not assumed**. Each example is a case of the corpus in [`compare/cases.js`](compare/cases.js), identified by a code (A2, D9…). It was run against **Asciidoctor (Ruby) 2.0.20** and **Asciidoctor.js 4.1.1**. The raw details are in [`compare/REPORT.md`](compare/REPORT.md) (`npm run compare`). The verdict of each case is locked by `test/comparison/corpus.test.js`: if either side changes behavior, a test fails.
 
 ---
 
@@ -10,10 +10,9 @@ Every claim below is **measured, not assumed**. Each example is a case of the co
 
 | | Number of cases |
 |---|---|
-| Cases in the corpus | **81** |
-| Rendered output identical to Ruby Asciidoctor | **60** |
+| Cases in the corpus | **79** |
+| Rendered output identical to Ruby Asciidoctor | **58** |
 | Rendered output different from Ruby Asciidoctor | **21**, in 7 families (§4) |
-| Cases where Asciidoctor.js differs from Ruby Asciidoctor | **2** (`ifeval`, §4.9) |
 
 The 21 differences break down as follows:
 
@@ -26,7 +25,7 @@ The 21 differences break down as follows:
 | 4.5 Directive in a value continuation line | C12 | simpler spec | debatable, marginal |
 | 4.7 Included non-AsciiDoc content | G5 | spec rule (§2) | the transducer |
 | 4.8 Asciidoctor bugs not reproduced | D6 G4 G7 | fixes | the transducer |
-| 4.10 Setext title | F5 | scope reduction (§1) | Asciidoctor |
+| 4.9 Setext title | F5 | scope reduction (§1) | Asciidoctor |
 
 One former difference has been **resolved**: directives in `////` comment blocks (D9, G13). The spec now makes comment regions inert, as Asciidoctor does (§4.6).
 
@@ -43,18 +42,18 @@ To isolate the effect of the **preprocessor model**, and only that, each case is
 1. **Asciidoctor alone**: its interleaved preprocessor, then its parser.
 2. **Transducer, then Asciidoctor**: the transducer produces a line stream with no directive left. That stream is passed to the same Asciidoctor, which therefore has no directive to evaluate. Directive-shaped output lines are content; they are re-escaped so the parser leaves them intact.
 
-The comparison is done on the **rendered text** (HTML with tags removed, whitespace normalized), against Ruby 2.0.20, the historical reference implementation, and against Asciidoctor.js 4.0.7. Intrinsic attributes (`backend-html5`, `safe-mode-unsafe`…) are supplied to the transducer by `intrinsicAttributes()`, just as Asciidoctor injects them into its `Document`.
+The comparison is done on the **rendered text** (HTML with tags removed, whitespace normalized), against Ruby 2.0.20, the historical reference implementation, and against Asciidoctor.js 4.1.1. Intrinsic attributes (`backend-html5`, `safe-mode-unsafe`…) are supplied to the transducer by `intrinsicAttributes()`, just as Asciidoctor injects them into its `Document`.
 
 ### What was completed in the implementation to make the comparison fair
 
-Before this work, several differences came from **gaps in the implementation**, not from the model. They would have polluted the comparison. Here is what was fixed, step by step (188 tests in total):
+Before this work, several differences came from **gaps in the implementation**, not from the model. They would have polluted the comparison. Here is what was fixed, step by step (186 tests in total):
 
 1. **Output contract conforming to the spec (§2, §5)**: attribute entry lines stay in the output stream. Before, they were removed, and the downstream parser lost the document attribute state (`{flag}` no longer substituted).
 2. **Line normalization** as in Asciidoctor: CRLF, BOM, trailing whitespace stripped. Before, `----␠` was not recognized as a delimiter.
 3. **Escaped directives** `\ifdef::…`, `\include::…`.
 4. **Conditional stack aligned** with `PreprocessorReader`: a mismatched `endif` is reported **without** popping; `endif::a[]` is compared to the full target (`a,b`); the first `,`/`+` delimiter decides the combinator; malformed directives are reported and dropped.
 5. **Single-line form `ifdef::x[text]`**: the text replaces the line and is **reprocessed** (it may be an `include::` or an entry, cases D3/D4), without attribute substitution. Before, it was emitted raw and substituted.
-6. **`ifeval` with Asciidoctor's actual grammar.** The README claimed that Asciidoctor evaluates arbitrary Ruby. **That is false**: it applies a closed binary-comparison grammar with operand typing (quoted strings, `to_i`-style integers, floats, booleans, nil). It is now reproduced exactly (E1 to E6).
+6. **`ifeval` with Asciidoctor's actual grammar.** The README claimed that Asciidoctor evaluates arbitrary Ruby. **That is false**: it applies a closed binary-comparison grammar with operand typing (quoted strings, `to_i`-style integers, floats, booleans, nil). It is now reproduced (E1, E4 to E6).
 7. **Attribute values**: legacy ` +` continuation (accepted by Asciidoctor), the "every line must repeat the marker" rule, stop on an empty line, `pass:[…]` unwrapping, escaped references `\{x}`, character references `{sp}`/`{nbsp}`, `{set:…}`/`{counter:…}` left to the parser.
 8. **Intrinsic and derived attributes**: `backend-*`, `basebackend-*`, `doctype-*`, `filetype-*`, `safe-mode-*`, `asciidoctor-version`, dates… Derived attributes are recomputed when `:doctype:`/`:backend:` appear **in the header**, and only there, as in Asciidoctor (F2/F3). An attribute unset through the API (`name!`) is now locked.
 9. **Complete header**: entries and comments before the title, several authors separated by `;` (`author_2`…), the exact revision-line regex, `:author:` split into its components at the end of the header, implicit attributes that do not override an already-defined attribute, `skip-front-matter`.
@@ -65,7 +64,7 @@ Before this work, several differences came from **gaps in the implementation**, 
 
 ---
 
-## 3. What is identical (60 cases)
+## 3. What is identical (58 cases)
 
 These behaviors are **reproduced identically**. They are the compatibility baseline of the model.
 
@@ -337,31 +336,7 @@ Asciidoctor has no cycle detection. It renders `LOOP` **64 times**, then the raw
 
 - These three differences are fixes. A spec describing the preprocessor does not have to standardize these bugs.
 
-### 4.9 `ifeval`: Asciidoctor.js disagrees with Ruby Asciidoctor (E2 E3)
-
-The two reference implementations disagree with each other:
-
-```asciidoc
-:level: high
-
-ifeval::[{level} == 0]
-WORD-IS-ZERO
-endif::[]
-```
-
-In Ruby, `"high".to_i` is `0`: the condition is true. In JS, `parseInt("high")` is `NaN`: it is false.
-
-```asciidoc
-ifeval::[true != "true"]
-BOOL-NE-STRING
-endif::[]
-```
-
-In Ruby, `true != "true"` is true. Asciidoctor.js raises an error on the boolean/string mix and treats the condition as false.
-
-The transducer follows **Ruby**. These two cases show that even the reference is not portable in unspecified areas. That is a direct argument for a **normative** `ifeval` grammar, including operand typing: the grammar already exists (§2, item 6); it only needs to be written into the spec.
-
-### 4.10 Setext title (F5)
+### 4.9 Setext title (F5)
 
 ```asciidoc
 The Title
@@ -433,12 +408,12 @@ The transducer's messages reuse Asciidoctor's (malformed directive, mismatched, 
 |---|---|---|
 | **Predictability** | A directive sees what is written above it, everywhere (§4.1) | Depends on the parser's look-ahead: lists, compound blocks, admonitions |
 | **Specifiability** | Regular grammars plus bounded state; testable without a parser | Would require standardizing the parser's line-consumption order |
-| **Portability** | Result is a pure function of the sources and the initial attributes | Ruby and JS already disagree (§4.9) |
+| **Portability** | Result is a pure function of the sources and the initial attributes | Result depends on the parser's look-ahead, an implementation detail (§4.1) |
 | **Tooling** | Usable on its own, linear cost, exact provenance (§5.1, §5.3) | Requires the full parser; wrong line numbers with `lines=` |
 | **Robustness** | Cycle detection, no escaped directive in a false branch, no synthetic entry in a listing (§4.8) | Bugs D6, G4, G7 |
 | **Composition** | D2/D3 diagnosed: each unit can be analyzed on its own | Conditionals and blocks can span files without any warning |
 | **Block awareness** | None: wrong when a block style changes its content model (`[source]--`, `[comment]--`) or on an entry outside a block boundary (D1) | Exact, since it is the parser |
-| **Strict compatibility** | 21 of 81 cases differ; they are edge cases, but some occur in practice (§4.2, §4.3) | The reference, by definition |
+| **Strict compatibility** | 21 of 79 cases differ; they are edge cases, but some occur in practice (§4.2, §4.3) | The reference, by definition |
 | **Integration** | The interface must supply the intrinsic attributes (§5.5) | Built in |
 | **Values** | As written | HTML-escaped, even in paths (§4.4) |
 | **New warnings** | D2/D3 on patterns that work today (§5.2) | None |
@@ -450,7 +425,7 @@ The transducer's messages reuse Asciidoctor's (malformed directive, mismatched, 
 In order of importance:
 
 1. **Make comments inert (§4).** *Applied.* A region opened by `////` is a barrier **for reads and writes**: no directive is evaluated inside it and its lines are emitted verbatim. The rule is lexical, reproduces Asciidoctor, removes the most dangerous defect of the original text (D9, G13), and keeps comment content intact should comments be preserved in the ASG. The `[comment]--` case (B10) remains out of reach and falls under D1.
-2. **Standardize `ifeval`**: the `operand op operand` grammar, operand typing (string, nil, boolean, integer and float with "numeric prefix, otherwise 0" semantics), and the rule "incompatible comparison = false". This ends the Ruby/JS divergence (E2, E3). The misconception that `ifeval` evaluates Ruby should also be corrected.
+2. **Standardize `ifeval`**: the `operand op operand` grammar, operand typing (string, nil, boolean, integer and float with "numeric prefix, otherwise 0" semantics), and the rule "incompatible comparison = false". The misconception that `ifeval` evaluates Ruby should also be corrected.
 3. **Settle Appendix C for passthrough**: `++++` is opaque. This is Asciidoctor's observed behavior (B3). Also add fenced ```` ``` ```` blocks to the verbatim set, and allow any number of `=` (≥ 3) in table delimiters.
 4. **Write down the list of intrinsic attributes** the processor must supply as initial state (`backend-*`, `basebackend-*`, `doctype-*`, `safe-mode-*`, `asciidoctor-version`…), together with the rule that derived attributes are only updated **within the header** (F2, F3).
 5. **Decide on values** (§4.4): either "no substitution besides references" (current text, saner) or "header substitutions". If the first option is kept, it should be listed among the acknowledged divergences of §5.
@@ -468,7 +443,7 @@ In order of importance:
 
 ```console
 npm install
-npm test             # 188 tests, including one per corpus case (verdicts locked against Asciidoctor.js)
+npm test             # 186 tests, including one per corpus case (verdicts locked against Asciidoctor.js)
 npm run compare      # regenerates compare/REPORT.md; adds a Ruby column if the asciidoctor gem is installed
 ```
 

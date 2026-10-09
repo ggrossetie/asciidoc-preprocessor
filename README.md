@@ -124,9 +124,7 @@ of it: Asciidoctor does **not** evaluate Ruby (an earlier version of this
 README said so; that was wrong). Operands are typed exactly as
 `resolve_expr_val` does — quoted strings, `true`/`false`, empty as nil,
 integers and floats with Ruby's `to_i`/`to_f` — and incompatible
-comparisons are false (see [`ifeval.js`](src/grammar/ifeval.js)). On two
-corner cases Asciidoctor.js itself departs from Ruby Asciidoctor; the
-transducer follows Ruby (cases E2, E3).
+comparisons are false (see [`ifeval.js`](src/grammar/ifeval.js)).
 
 ## Includes
 
@@ -171,12 +169,11 @@ output (it is total) — the guarantee is simply void, matching §6.
 
 [COMPARISON.md](COMPARISON.md) lists every difference with Asciidoctor,
 with examples, and weighs the advantages and drawbacks of each.
-[compare/REPORT.md](compare/REPORT.md) is the raw, generated evidence: 81
-cases run through Asciidoctor.js 4.0.7 and Asciidoctor (Ruby) 2.0.20 and
+[compare/REPORT.md](compare/REPORT.md) is the raw, generated evidence: 79
+cases run through Asciidoctor.js 4.1.1 and Asciidoctor (Ruby) 2.0.20 and
 through the transducer + the same parser. The rendered output is identical
-in 60 cases against Ruby Asciidoctor (58 against Asciidoctor.js, which
-departs from Ruby in two `ifeval` corner cases); every case that differs
-is one of the departures analyzed in COMPARISON.md.
+in 58 cases; every case that differs is one of the departures analyzed in
+COMPARISON.md.
 
 The point is not that Asciidoctor is "buggy" — the proposal argues
 (Appendix A.2) that the parser is behaving consistently on the stream it

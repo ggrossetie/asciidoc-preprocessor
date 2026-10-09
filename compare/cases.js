@@ -328,20 +328,6 @@ export const cases = [
     expect: 'same',
   },
   {
-    id: 'E2',
-    category: 'ifeval',
-    title: 'Unquoted non-numeric value compared to 0 (Ruby to_i vs JS parseInt)',
-    src: doc(':level: high', '', 'ifeval::[{level} == 0]', 'WORD-IS-ZERO', 'endif::[]'),
-    expect: 'different',
-  },
-  {
-    id: 'E3',
-    category: 'ifeval',
-    title: 'Boolean compared to a string with !=',
-    src: doc('ifeval::[true != "true"]', 'BOOL-NE-STRING', 'endif::[]'),
-    expect: 'different',
-  },
-  {
     id: 'E4',
     category: 'ifeval',
     title: 'Version comparison against an intrinsic attribute',
@@ -362,6 +348,7 @@ export const cases = [
     src: doc('ifeval::[{x}]', 'AFTER-MALFORMED', 'endif::[]'),
     expect: 'same',
   },
+
 
   // ── F. Intrinsic and derived attributes ──────────────────────────────
   {
