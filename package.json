@@ -18,6 +18,6 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "asciidoctor": "^4.0.7"
+    "asciidoctor": "^4.1.1"
   }
 }

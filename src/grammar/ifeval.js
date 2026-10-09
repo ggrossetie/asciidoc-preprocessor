@@ -31,7 +31,7 @@ export class IfevalSyntaxError extends Error {}
 class IncomparableError extends Error {}
 
 const RUBY_INT_PREFIX = /^\s*([+-]?\d+(?:_\d+)*)/;
-const RUBY_FLOAT_PREFIX = /^\s*([+-]?\d+(?:_\d+)*(?:\.\d+(?:_\d+)*)?(?:[eE][+-]?\d+)?)/;
+const RUBY_FLOAT_PREFIX = /^\s*([+-]?(?:\d+(?:_\d+)*(?:\.\d+(?:_\d+)*)?|\.\d+(?:_\d+)*)(?:[eE][+-]?\d+)?)/;
 
 function rubyToI(s) {
   const m = RUBY_INT_PREFIX.exec(s);
