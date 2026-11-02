@@ -26,6 +26,9 @@ Each case is converted (1) by Asciidoctor directly and (2) by the transducer, wh
 | [B8](#b8) | entry-position | Entry right after a block attribute line | same | same | same |
 | [B9](#b9) | entry-position | Listing delimiter inside a paragraph (D1 territory: not a block boundary) | same | same | same |
 | [B10](#b10) | entry-position | Directive inside an open block styled as comment (style is block metadata) | different | different | same |
+| [B11](#b11) | entry-position | Entry-shaped line inside an explicitly styled source paragraph | same | same | same |
+| [B12](#b12) | entry-position | Listing nested in an example block: only the listing is opaque | same | same | same |
+| [B13](#b13) | entry-position | Slash line inside a styled source paragraph is content | same | same | same |
 | [C1](#c1) | entry-grammar | Name with a space: Asciidoctor sanitizes it, the spec grammar rejects it | different | different | same |
 | [C2](#c2) | entry-grammar | Value containing "<": Asciidoctor stores it escaped (&lt;) | different | different | same |
 | [C3](#c3) | entry-grammar | Value containing "&" used in an include target | different | different | same |
@@ -48,16 +51,30 @@ Each case is converted (1) by Asciidoctor directly and (2) by the transducer, wh
 | [D8](#d8) | conditionals | Conditional opened in an include, closed in the includer (D2 violation) | same | same | same |
 | [D9](#d9) | conditionals | Directive inside a comment block | same | same | same |
 | [D10](#d10) | conditionals | Directive line with trailing whitespace | same | same | same |
+| [D11](#d11) | conditionals | Single-line ifdef whose text contains brackets | same | same | same |
+| [D12](#d12) | conditionals | Single-line ifdef with brackets in its text, condition false | same | same | same |
+| [D13](#d13) | conditionals | Mixed , and + in one target: the first delimiter decides | same | same | same |
+| [D14](#d14) | conditionals | Orphan endif is dropped, not rendered | same | same | same |
+| [D15](#d15) | conditionals | Conditional left open by an include, the includer never closes it (D2 violation) | same | same | same |
+| [D16](#d16) | conditionals | Conditional opened in the includer, endif in an include (D2 violation) | same | same | same |
 | [E1](#e1) | ifeval | Integers vs quoted strings: 5 < 10 but "5" > "10" | same | same | same |
 | [E4](#e4) | ifeval | Version comparison against an intrinsic attribute | same | same | same |
 | [E5](#e5) | ifeval | Missing attribute in an operand | same | same | same |
 | [E6](#e6) | ifeval | Malformed expression | same | same | same |
+| [E7](#e7) | ifeval | Arithmetic is not evaluated: an operand is one value | same | same | same |
+| [E8](#e8) | ifeval | Operands of different types compare as false, not as an error | same | same | same |
+| [E9](#e9) | ifeval | Comparison operator inside a quoted operand (Ruby and JS disagree) | different | same | different |
+| [E10](#e10) | ifeval | Single-quoted vs. double-quoted operands (Ruby and JS disagree) | same | different | different |
+| [E11](#e11) | ifeval | Unquoted reference to a missing attribute | same | same | same |
+| [E12](#e12) | ifeval | Boolean operands | same | same | same |
+| [E13](#e13) | ifeval | Float operand compared with an integer | same | same | same |
 | [F1](#f1) | intrinsics | Backend / basebackend / safe-mode attributes | same | same | same |
 | [F2](#f2) | intrinsics | doctype set in the header updates doctype-* attributes | same | same | same |
 | [F3](#f3) | intrinsics | doctype set in the body does not update doctype-* attributes | same | same | same |
 | [F4](#f4) | intrinsics | Header implicit attributes (doctitle, author, revnumber) | same | same | same |
 | [F5](#f5) | intrinsics | Setext (underlined) document title | different | different | same |
 | [F6](#f6) | intrinsics | Doctitle containing "&" | different | different | same |
+| [F7](#f7) | intrinsics | Two-line title whose underline looks like a listing delimiter | different | different | same |
 | [G1](#g1) | include | Body entry retargets a subsequent include | same | same | same |
 | [G2](#g2) | include | lines= and tag= selection | same | same | same |
 | [G3](#g3) | include | leveloffset= | same | same | same |
@@ -77,14 +94,26 @@ Each case is converted (1) by Asciidoctor directly and (2) by the transducer, wh
 | [G17](#g17) | include | Entries from an included file take effect in expansion order | same | same | same |
 | [G18](#g18) | include | Include inside a list item continuation, the included file defines an attribute used right after | different | different | same |
 | [G19](#g19) | include | Source location of a warning inside a lines= selection | same | same | same |
+| [G20](#g20) | include | Same file reached through two paths (diamond): not a cycle | same | same | same |
+| [G21](#g21) | include | Unknown key in an include attribute list is ignored | same | same | same |
+| [G22](#g22) | include | Positional value in an include attribute list is ignored | same | same | same |
+| [G23](#g23) | include | Invalid lines= value (Ruby and JS disagree) | same | different | different |
+| [G24](#g24) | include | Mutual include cycle | different | different | same |
+| [G25](#g25) | include | Listing opened by an include: the barrier crosses the include boundary (D3 violation) | same | same | same |
 | [I1](#i1) | comments | Directive-shaped text after // is not a directive | same | same | same |
 | [I2](#i2) | comments | Entry-shaped text after // is not an entry | same | same | same |
 | [I3](#i3) | comments | Include-shaped text after // reads no file | same | same | same |
 | [I4](#i4) | comments | // endif::[] does not close a conditional; the comment is dropped with its false branch | same | same | same |
 | [I5](#i5) | comments | Line comment between the doctitle and the author line | same | same | same |
 | [I6](#i6) | comments | Three slashes (///) is neither a comment nor an entry | same | same | same |
+| [I7](#i7) | comments | Comment delimiter directly after a paragraph: its directives stay inert | same | same | same |
+| [I8](#i8) | comments | Unterminated comment block containing an entry and a directive | same | same | same |
+| [I9](#i9) | comments | Comment delimiter inside a styled source paragraph (style is block metadata) | different | different | same |
+| [I10](#i10) | comments | Line comment adjacent to paragraph text is not rendered | same | same | same |
+| [I11](#i11) | comments | Tag directives in line comments are not rendered without an include | same | same | same |
 | [H1](#h1) | lines | CRLF line endings and trailing whitespace on a delimiter | same | same | same |
 | [H2](#h2) | lines | Front matter with skip-front-matter | same | same | same |
+| [H3](#h3) | lines | Byte order mark at the start of the source | same | same | same |
 
 ## Cases
 
@@ -870,6 +899,136 @@ Transducer + parser rendered text:
 ```
 
 Transducer diagnostics: `warning: [D2] unbalanced conditional: 1 directive(s) opened in this include unit are still open at its end`, `error: [unterminated-conditional] detected unterminated preprocessor conditional directive: ifdef::nope[]`
+
+### B11
+
+**Entry-shaped line inside an explicitly styled source paragraph** (entry-position) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+[source]
+a line of code
+----
+:flag: yes
+----
+
+ifdef::flag[FLAG-SET]
+```
+
+Asciidoctor.js rendered text:
+
+```
+a line of code
+----
+:flag: yes
+----
+```
+
+Transducer output (fed to the parser):
+
+```
+[source]
+a line of code
+----
+:flag: yes
+----
+
+```
+
+Transducer + parser rendered text:
+
+```
+a line of code
+----
+:flag: yes
+----
+```
+
+### B12
+
+**Listing nested in an example block: only the listing is opaque** (entry-position) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+====
+----
+:inner: yes
+----
+:outer: yes
+====
+
+ifdef::inner[INNER]
+
+ifdef::outer[OUTER]
+```
+
+Asciidoctor.js rendered text:
+
+```
+:inner: yes
+OUTER
+```
+
+Transducer output (fed to the parser):
+
+```
+====
+----
+:inner: yes
+----
+:outer: yes
+====
+
+
+OUTER
+```
+
+Transducer + parser rendered text:
+
+```
+:inner: yes
+OUTER
+```
+
+### B13
+
+**Slash line inside a styled source paragraph is content** (entry-position) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+[source]
+first
+// kept
+last
+```
+
+Asciidoctor.js rendered text:
+
+```
+first
+// kept
+last
+```
+
+Transducer output (fed to the parser):
+
+```
+[source]
+first
+// kept
+last
+```
+
+Transducer + parser rendered text:
+
+```
+first
+// kept
+last
+```
 
 ### C1
 
@@ -1665,6 +1824,243 @@ Transducer + parser rendered text:
 VISIBLE
 ```
 
+### D11
+
+**Single-line ifdef whose text contains brackets** (conditionals) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+:x:
+
+ifdef::x[see link:a.html[the page]]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+see
+the page
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+:x:
+
+see link:a.html[the page]
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+see
+the page
+AFTER
+```
+
+### D12
+
+**Single-line ifdef with brackets in its text, condition false** (conditionals) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+ifdef::nope[image:a.png[alt]]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+AFTER
+```
+
+### D13
+
+**Mixed , and + in one target: the first delimiter decides** (conditionals) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+:a:
+
+ifdef::a,b+c[MIXED-OR]
+
+ifdef::b+c,a[MIXED-AND]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+MIXED-OR
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+:a:
+
+MIXED-OR
+
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+MIXED-OR
+AFTER
+```
+
+### D14
+
+**Orphan endif is dropped, not rendered** (conditionals) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+BEFORE
+
+endif::[]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+BEFORE
+AFTER
+```
+
+Asciidoctor.js log: `ERROR: unmatched preprocessor directive: endif::[] (<stdin>: line 3)`
+
+Asciidoctor (Ruby) log: `ERROR: unmatched preprocessor directive: endif::[] (<stdin>: line 3)`
+
+Transducer output (fed to the parser):
+
+```
+BEFORE
+
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+BEFORE
+AFTER
+```
+
+Transducer diagnostics: `error: [D2] unmatched preprocessor directive: endif::[] (<stdin>:3)`
+
+### D15
+
+**Conditional left open by an include, the includer never closes it (D2 violation)** (conditionals) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+include::open.adoc[]
+
+PARENT-AFTER
+```
+
+`open.adoc`:
+
+```
+ifdef::nope[]
+HIDDEN
+```
+
+Asciidoctor.js rendered text:
+
+```
+(empty)
+```
+
+Asciidoctor.js log: `ERROR: detected unterminated preprocessor conditional directive: ifdef::nope[] (<stdin>: line 3)`
+
+Transducer output (fed to the parser):
+
+```
+(empty)
+```
+
+Transducer + parser rendered text:
+
+```
+(empty)
+```
+
+Transducer diagnostics: `warning: [D2] unbalanced conditional: 1 directive(s) opened in this include unit are still open at its end`, `warning: [D2] unbalanced conditional: 1 directive(s) opened in this include unit are still open at its end`, `error: [unterminated-conditional] detected unterminated preprocessor conditional directive: ifdef::nope[]`
+
+### D16
+
+**Conditional opened in the includer, endif in an include (D2 violation)** (conditionals) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+ifdef::nope[]
+HIDDEN
+include::close.adoc[]
+STILL-HIDDEN
+```
+
+`close.adoc`:
+
+```
+endif::[]
+```
+
+Asciidoctor.js rendered text:
+
+```
+(empty)
+```
+
+Asciidoctor.js log: `ERROR: detected unterminated preprocessor conditional directive: ifdef::nope[] (<stdin>: line 4)`
+
+Transducer output (fed to the parser):
+
+```
+(empty)
+```
+
+Transducer + parser rendered text:
+
+```
+(empty)
+```
+
+Transducer diagnostics: `warning: [D2] unbalanced conditional: 1 directive(s) opened in this include unit are still open at its end`, `error: [unterminated-conditional] detected unterminated preprocessor conditional directive: ifdef::nope[]`
+
 ### E1
 
 **Integers vs quoted strings: 5 < 10 but "5" > "10"** (ifeval) — JS: same, Ruby: same
@@ -1795,6 +2191,261 @@ AFTER-MALFORMED
 ```
 
 Transducer diagnostics: `error: [directive] malformed preprocessor directive - invalid expression: ifeval::[{x}] (<stdin>:1)`, `error: [D2] unmatched preprocessor directive: endif::[] (<stdin>:3)`
+
+### E7
+
+**Arithmetic is not evaluated: an operand is one value** (ifeval) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+ifeval::[1+1 == 2]
+ARITHMETIC-EVALUATED
+endif::[]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+AFTER
+```
+
+### E8
+
+**Operands of different types compare as false, not as an error** (ifeval) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+ifeval::["1" == 1]
+STRING-EQ-INT
+endif::[]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+AFTER
+```
+
+### E9
+
+**Comparison operator inside a quoted operand (Ruby and JS disagree)** (ifeval) — JS: different, Ruby: same
+
+Source (`main.adoc`):
+
+```
+ifeval::["a == b" == "a == b"]
+QUOTED-OP
+endif::[]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+AFTER
+```
+
+Asciidoctor (Ruby) rendered text:
+
+```
+QUOTED-OP
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+QUOTED-OP
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+QUOTED-OP
+AFTER
+```
+
+### E10
+
+**Single-quoted vs. double-quoted operands (Ruby and JS disagree)** (ifeval) — JS: same, Ruby: different
+
+Source (`main.adoc`):
+
+```
+ifeval::["a" == 'a']
+MIXED-QUOTES
+endif::[]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+MIXED-QUOTES
+AFTER
+```
+
+Asciidoctor (Ruby) rendered text:
+
+```
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+MIXED-QUOTES
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+MIXED-QUOTES
+AFTER
+```
+
+### E11
+
+**Unquoted reference to a missing attribute** (ifeval) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+ifeval::[{unset} == 1]
+UNSET-EQ-1
+endif::[]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+AFTER
+```
+
+### E12
+
+**Boolean operands** (ifeval) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+ifeval::[true == true]
+BOOL-TRUE
+endif::[]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+BOOL-TRUE
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+BOOL-TRUE
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+BOOL-TRUE
+AFTER
+```
+
+### E13
+
+**Float operand compared with an integer** (ifeval) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+ifeval::[1.5 < 2]
+FLOAT-LT
+endif::[]
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+FLOAT-LT
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+FLOAT-LT
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+FLOAT-LT
+AFTER
+```
 
 ### F1
 
@@ -2035,6 +2686,48 @@ Transducer + parser rendered text:
 
 ```
 RAW-TITLE
+```
+
+### F7
+
+**Two-line title whose underline looks like a listing delimiter** (intrinsics) — JS: different, Ruby: different
+
+Source (`main.adoc`):
+
+```
+code
+----
+:flag: yes
+----
+
+ifdef::flag[FLAG-SET]
+```
+
+Asciidoctor.js rendered text:
+
+```
+code
+FLAG-SET
+```
+
+Asciidoctor.js log: `WARN: unterminated listing block (<stdin>: line 4)`
+
+Asciidoctor (Ruby) log: `WARN: unterminated listing block (<stdin>: line 4)`
+
+Transducer output (fed to the parser):
+
+```
+code
+----
+:flag: yes
+----
+
+```
+
+Transducer + parser rendered text:
+
+```
+code
 ```
 
 ### G1
@@ -2892,6 +3585,359 @@ unterminated listing
 
 Transducer diagnostics: `warning: [D3] unbalanced delimiter: 1 delimited block(s) opened in this include unit are still open at its end`, `warning: [D3] unbalanced delimiter: 1 delimited block(s) opened in this include unit are still open at its end`
 
+### G20
+
+**Same file reached through two paths (diamond): not a cycle** (include) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+include::a.adoc[]
+
+include::b.adoc[]
+```
+
+`a.adoc`:
+
+```
+A
+
+include::d.adoc[]
+```
+
+`b.adoc`:
+
+```
+B
+
+include::d.adoc[]
+```
+
+`d.adoc`:
+
+```
+LEAF
+```
+
+Asciidoctor.js rendered text:
+
+```
+A
+LEAF
+B
+LEAF
+```
+
+Transducer output (fed to the parser):
+
+```
+A
+
+LEAF
+
+B
+
+LEAF
+```
+
+Transducer + parser rendered text:
+
+```
+A
+LEAF
+B
+LEAF
+```
+
+### G21
+
+**Unknown key in an include attribute list is ignored** (include) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+include::a.adoc[foo=bar]
+
+AFTER
+```
+
+`a.adoc`:
+
+```
+INCLUDED
+```
+
+Asciidoctor.js rendered text:
+
+```
+INCLUDED
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+INCLUDED
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+INCLUDED
+AFTER
+```
+
+### G22
+
+**Positional value in an include attribute list is ignored** (include) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+include::a.adoc[bogus]
+
+AFTER
+```
+
+`a.adoc`:
+
+```
+INCLUDED
+```
+
+Asciidoctor.js rendered text:
+
+```
+INCLUDED
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+INCLUDED
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+INCLUDED
+AFTER
+```
+
+### G23
+
+**Invalid lines= value (Ruby and JS disagree)** (include) — JS: same, Ruby: different
+
+Source (`main.adoc`):
+
+```
+include::a.adoc[lines=x..y]
+
+AFTER
+```
+
+`a.adoc`:
+
+```
+INCLUDED
+```
+
+Asciidoctor.js rendered text:
+
+```
+INCLUDED
+AFTER
+```
+
+Asciidoctor (Ruby) rendered text:
+
+```
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+INCLUDED
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+INCLUDED
+AFTER
+```
+
+### G24
+
+**Mutual include cycle** (include) — JS: different, Ruby: different
+
+Source (`main.adoc`):
+
+```
+include::a.adoc[]
+```
+
+`a.adoc`:
+
+```
+A
+include::b.adoc[]
+```
+
+`b.adoc`:
+
+```
+B
+include::a.adoc[]
+```
+
+Asciidoctor.js rendered text:
+
+```
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+A
+B
+include::a.adoc[]
+```
+
+Asciidoctor.js log: `ERROR: maximum include depth of 64 exceeded (b.adoc: line 2)`
+
+Asciidoctor (Ruby) log: `ERROR: maximum include depth of 64 exceeded (b.adoc: line 2)`
+
+Transducer output (fed to the parser):
+
+```
+A
+B
+```
+
+Transducer + parser rendered text:
+
+```
+A
+B
+```
+
+Transducer diagnostics: `error: [include-cycle] circular include: a.adoc (b.adoc:2)`
+
+### G25
+
+**Listing opened by an include: the barrier crosses the include boundary (D3 violation)** (include) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+include::open.adoc[]
+:in: listing
+----
+
+ifdef::in[LEAKED]
+
+AFTER
+```
+
+`open.adoc`:
+
+```
+----
+```
+
+Asciidoctor.js rendered text:
+
+```
+:in: listing
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+----
+:in: listing
+----
+
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+:in: listing
+AFTER
+```
+
+Transducer diagnostics: `warning: [D3] unbalanced delimiter: 1 delimited block(s) opened in this include unit are still open at its end`
+
 ### I1
 
 **Directive-shaped text after // is not a directive** (comments) — JS: same, Ruby: same
@@ -3084,6 +4130,204 @@ Transducer + parser rendered text:
 /// :x: 1
 ```
 
+### I7
+
+**Comment delimiter directly after a paragraph: its directives stay inert** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+para
+////
+ifdef::nope[]
+still
+////
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+para
+AFTER
+```
+
+Transducer output (fed to the parser):
+
+```
+para
+////
+ifdef::nope[]
+still
+////
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+para
+AFTER
+```
+
+### I8
+
+**Unterminated comment block containing an entry and a directive** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+BEFORE
+
+////
+:x: 1
+ifdef::nope[]
+```
+
+Asciidoctor.js rendered text:
+
+```
+BEFORE
+```
+
+Asciidoctor.js log: `WARN: unterminated comment block (<stdin>: line 3)`
+
+Asciidoctor (Ruby) log: `WARN: unterminated comment block (<stdin>: line 3)`
+
+Transducer output (fed to the parser):
+
+```
+BEFORE
+
+////
+:x: 1
+ifdef::nope[]
+```
+
+Transducer + parser rendered text:
+
+```
+BEFORE
+```
+
+Transducer diagnostics: `warning: [D3] unbalanced delimiter: 1 delimited block(s) opened in this include unit are still open at its end`
+
+### I9
+
+**Comment delimiter inside a styled source paragraph (style is block metadata)** (comments) — JS: different, Ruby: different
+
+Source (`main.adoc`):
+
+```
+[source]
+code
+////
+ifdef::nope[]
+////
+tail
+
+AFTER
+```
+
+Asciidoctor.js rendered text:
+
+```
+code
+////
+```
+
+Asciidoctor.js log: `ERROR: detected unterminated preprocessor conditional directive: ifdef::nope[] (<stdin>: line 8)`
+
+Transducer output (fed to the parser):
+
+```
+[source]
+code
+////
+ifdef::nope[]
+////
+tail
+
+AFTER
+```
+
+Transducer + parser rendered text:
+
+```
+code
+////
+ifdef::nope[]
+////
+tail
+AFTER
+```
+
+### I10
+
+**Line comment adjacent to paragraph text is not rendered** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+first
+// note
+second
+```
+
+Asciidoctor.js rendered text:
+
+```
+first
+second
+```
+
+Transducer output (fed to the parser):
+
+```
+first
+// note
+second
+```
+
+Transducer + parser rendered text:
+
+```
+first
+second
+```
+
+### I11
+
+**Tag directives in line comments are not rendered without an include** (comments) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+// tag::x[]
+BODY
+// end::x[]
+```
+
+Asciidoctor.js rendered text:
+
+```
+BODY
+```
+
+Transducer output (fed to the parser):
+
+```
+// tag::x[]
+BODY
+// end::x[]
+```
+
+Transducer + parser rendered text:
+
+```
+BODY
+```
+
 ### H1
 
 **CRLF line endings and trailing whitespace on a delimiter** (lines) — JS: same, Ruby: same
@@ -3154,6 +4398,38 @@ Transducer + parser rendered text:
 
 ```
 HAS-FRONT-MATTER
+```
+
+### H3
+
+**Byte order mark at the start of the source** (lines) — JS: same, Ruby: same
+
+Source (`main.adoc`):
+
+```
+﻿:flag: yes
+
+ifdef::flag[BOM-OK]
+```
+
+Asciidoctor.js rendered text:
+
+```
+BOM-OK
+```
+
+Transducer output (fed to the parser):
+
+```
+:flag: yes
+
+BOM-OK
+```
+
+Transducer + parser rendered text:
+
+```
+BOM-OK
 ```
 
 ## Asciidoctor's reader without its parser

@@ -169,11 +169,11 @@ output (it is total) — the guarantee is simply void, matching §6.
 
 [COMPARISON.md](COMPARISON.md) lists every difference with Asciidoctor,
 with examples, and weighs the advantages and drawbacks of each.
-[compare/REPORT.md](compare/REPORT.md) is the raw, generated evidence: 79
+[compare/REPORT.md](compare/REPORT.md) is the raw, generated evidence: 108
 cases run through Asciidoctor.js 4.1.1 and Asciidoctor (Ruby) 2.0.20 and
 through the transducer + the same parser. The rendered output is identical
-in 58 cases; every case that differs is one of the departures analyzed in
-COMPARISON.md.
+to Ruby Asciidoctor in 82 cases; every case that differs is one of the
+departures analyzed in COMPARISON.md.
 
 The point is not that Asciidoctor is "buggy" — the proposal argues
 (Appendix A.2) that the parser is behaving consistently on the stream it

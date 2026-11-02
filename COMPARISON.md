@@ -10,11 +10,11 @@ Every claim below is **measured, not assumed**. Each example is a case of the co
 
 | | Number of cases |
 |---|---|
-| Cases in the corpus | **79** |
-| Rendered output identical to Ruby Asciidoctor | **58** |
-| Rendered output different from Ruby Asciidoctor | **21**, in 7 families (§4) |
+| Cases in the corpus | **108** |
+| Rendered output identical to Ruby Asciidoctor | **82** |
+| Rendered output different from Ruby Asciidoctor | **26**, in 10 families (§4) |
 
-The 21 differences break down as follows:
+The 26 differences break down as follows:
 
 | Family | Cases | Nature | Who is "right"? |
 |---|---|---|---|
@@ -23,9 +23,11 @@ The 21 differences break down as follows:
 | 4.3 Attribute name grammar | C1 | stricter spec | debatable (compatibility vs. rigor) |
 | 4.4 Substitutions applied to values | C2 C3 F6 | simpler spec | the transducer (Asciidoctor HTML-escapes file paths) |
 | 4.5 Directive in a value continuation line | C12 | simpler spec | debatable, marginal |
+| 4.6 Comment delimiter inside a styled paragraph | I9 | limit of the lexical approach (§1) | debatable: the parser has block information, but Asciidoctor loses the rest of the document |
 | 4.7 Included non-AsciiDoc content | G5 | spec rule (§2) | the transducer |
-| 4.8 Asciidoctor bugs not reproduced | D6 G4 G7 | fixes | the transducer |
-| 4.9 Setext title | F5 | scope reduction (§1) | Asciidoctor |
+| 4.8 Asciidoctor bugs not reproduced | D6 G4 G7 G24 | fixes | the transducer |
+| 4.9 Setext title | F5 F7 | scope reduction (§1) | Asciidoctor |
+| 4.10 Ruby and JS Asciidoctor disagree | E10 G23 | the transducer follows Asciidoctor.js | neither reference is authoritative |
 
 One former difference has been **resolved**: directives in `////` comment blocks (D9, G13). The spec now makes comment regions inert, as Asciidoctor does (§4.6).
 
@@ -46,7 +48,7 @@ The comparison is done on the **rendered text** (HTML with tags removed, whitesp
 
 ### What was completed in the implementation to make the comparison fair
 
-Before this work, several differences came from **gaps in the implementation**, not from the model. They would have polluted the comparison. Here is what was fixed, step by step (186 tests in total):
+Before this work, several differences came from **gaps in the implementation**, not from the model. They would have polluted the comparison. Here is what was fixed, step by step (215 tests in total):
 
 1. **Output contract conforming to the spec (§2, §5)**: attribute entry lines stay in the output stream. Before, they were removed, and the downstream parser lost the document attribute state (`{flag}` no longer substituted).
 2. **Line normalization** as in Asciidoctor: CRLF, BOM, trailing whitespace stripped. Before, `----␠` was not recognized as a delimiter.
@@ -64,20 +66,21 @@ Before this work, several differences came from **gaps in the implementation**, 
 
 ---
 
-## 3. What is identical (58 cases)
+## 3. What is identical (82 cases)
 
 These behaviors are **reproduced identically**. They are the compatibility baseline of the model.
 
 - **Simple sequence**: an entry then a directive outside any buffered structure (A1, A10, G1, G17).
 - **AsciiDoc table cells** (A9, Appendix A.3): the entry stays local to the cell, a directive in the table reads the pre-table state, and `{cellattr}` is substituted in the cell. The transducer gets this result without any notion of cells, through the write barrier of the opaque region.
-- **Opaque regions**: listing, passthrough, fenced, plain table cell (B2, B3, B4, B6). A delimiter inside a paragraph also gives the same result (B9).
+- **Opaque regions**: listing, passthrough, fenced, plain table cell (B2, B3, B4, B6). A delimiter inside a paragraph also gives the same result (B9), and so does a listing inside an explicitly styled paragraph (B11). In an example block only the nested listing is opaque (B12), and a listing opened by an included file stays opaque after the include (G25).
 - **Value grammar**: soft, hard and legacy continuations, `pass:[]`, snapshot resolution, API locking and soft-set, `{set:…}` invisible to directives in both models, `{sp}` (C4 to C11).
-- **Conditionals**: `,`/`+` combinators, mismatched `endif`, single-line form containing an include or an entry, escaping, unterminated conditional, conditional spanning an include, directive inside a comment block, trailing whitespace (D1 to D5, D7 to D10).
-- **`ifeval`**: integers vs. strings (`5 < 10` is true, `"5" < "10"` is false), intrinsic version, missing attribute, malformed expression (E1, E4 to E6).
+- **Conditionals**: `,`/`+` combinators, mismatched `endif`, single-line form containing an include or an entry, escaping, unterminated conditional, conditional spanning an include, directive inside a comment block, trailing whitespace, brackets in the single-line form, mixed `,`/`+`, orphan `endif`, a conditional left open or closed across an include boundary (D1 to D5, D7 to D16).
+- **`ifeval`**: integers vs. strings (`5 < 10` is true, `"5" < "10"` is false), intrinsic version, missing attribute (quoted or not), malformed expression, operands of different types, no arithmetic, booleans, floats (E1, E4 to E8, E11 to E13).
 - **Intrinsic attributes and header**: backend, safe-mode, doctype in the header then in the body, multiple authors, revision (F1 to F4).
-- **Include**: `lines=`, `tag=`, `leveloffset=`, `indent=`, references in the attribute list, missing file, `optional`, `drop-line`, `secure` mode, URI without `allow-uri-read`, include in a comment, "header/footer" includes that open and close a block (G1 to G3, G6, G8 to G17, G19).
-- **Single-line comments** (I1 to I6): a line starting with `//` can never be a directive or an entry, since both are only recognized at column 0. It is passed through verbatim and the parser treats it as a comment, so no special rule is needed: it is inert by construction. `// endif::[]` does not close a conditional, and inside a false branch the comment line is dropped with the rest of the branch. A line comment may sit between the doctitle and the author line. `///` (three slashes) is neither a comment nor an entry: it is text. As with `////` blocks, the parser receives the comment text as written, which is what an ASG preserving comments needs. The only `//` lines with a preprocessing role are `// tag::name[]` / `// end::name[]` markers, and only in a file included with `tag=`/`tags=` (G2).
-- **Lines**: CRLF, front matter (H1, H2).
+- **Include**: `lines=`, `tag=`, `leveloffset=`, `indent=`, references in the attribute list, missing file, `optional`, `drop-line`, `secure` mode, URI without `allow-uri-read`, include in a comment, "header/footer" includes that open and close a block, the same file reached through two paths, unknown or positional keys in the attribute list (G1 to G3, G6, G8 to G17, G19 to G22).
+- **Comment blocks** (I7, I8): `////` directly after a paragraph is still a comment; an unterminated one extends to the end of the source.
+- **Single-line comments** (I1 to I6, I10, I11): a line starting with `//` can never be a directive or an entry, since both are only recognized at column 0. It is passed through verbatim and the parser treats it as a comment, so no special rule is needed: it is inert by construction. `// endif::[]` does not close a conditional, and inside a false branch the comment line is dropped with the rest of the branch. A line comment may sit between the doctitle and the author line. `///` (three slashes) is neither a comment nor an entry: it is text. As with `////` blocks, the parser receives the comment text as written, which is what an ASG preserving comments needs. The only `//` lines with a preprocessing role are `// tag::name[]` / `// end::name[]` markers, and only in a file included with `tag=`/`tags=` (G2).
+- **Lines**: CRLF, front matter, byte order mark (H1 to H3).
 
 ---
 
@@ -285,6 +288,21 @@ Spec §4 now makes comment regions **inert**: a barrier for reads *and* writes. 
 
 - **ASG.** Whether comment blocks should be kept in the ASG is under discussion. Inertness is the precondition that makes it useful: the comment node holds exactly what the author wrote (directive lines included, unevaluated), not a preprocessed variant in which an `include` would have been expanded into the comment or part of it suppressed by a conditional.
 
+**Remaining difference: I9, a comment delimiter inside a styled paragraph**
+
+```asciidoc
+[source]
+code
+////
+ifdef::nope[]
+////
+tail
+
+AFTER
+```
+
+For Asciidoctor, `[source]` makes `////` paragraph content, so the `ifdef` is evaluated and hides the rest of the document (`unterminated preprocessor conditional directive`): it renders `code` and `////`. The transducer does not read block metadata (§1): it opens a comment region, leaves `ifdef` unevaluated and keeps `tail` and `AFTER`. This is the same limit as `[comment]--` (B10). Honoring the style would require reading `[style]` lines, which is bounded state but block metadata.
+
 ### 4.7 Included non-AsciiDoc content that looks like an entry (G5)
 
 ```asciidoc
@@ -300,7 +318,7 @@ Asciidoctor does not preprocess the file (`.conf` is not an AsciiDoc extension),
 - **Advantage.** Consistent: a non-AsciiDoc file is content, not document configuration.
 - **Drawback.** An author who includes an attribute file named `.properties` (a rare but real pattern) has to rename it to `.adoc`.
 
-### 4.8 Asciidoctor bugs the transducer does not reproduce (D6 G4 G7)
+### 4.8 Asciidoctor bugs the transducer does not reproduce (D6 G4 G7 G24)
 
 **D6: an escaped directive inside a false branch is rendered anyway**
 
@@ -332,11 +350,11 @@ include::loop.adoc[]
 
 with `loop.adoc` containing `LOOP` then `include::loop.adoc[]`.
 
-Asciidoctor has no cycle detection. It renders `LOOP` **64 times**, then the raw line `include::loop.adoc[]`, with the error `maximum include depth of 64 exceeded`. The transducer renders `LOOP` once, with the error `circular include: loop.adoc (loop.adoc:2)`.
+Asciidoctor has no cycle detection. It renders `LOOP` **64 times**, then the raw line `include::loop.adoc[]`, with the error `maximum include depth of 64 exceeded`. The transducer renders `LOOP` once, with the error `circular include: loop.adoc (loop.adoc:2)`. A mutual cycle behaves the same way (G24), and a file reached twice through two separate paths is not a cycle (G20).
 
 - These three differences are fixes. A spec describing the preprocessor does not have to standardize these bugs.
 
-### 4.9 Setext title (F5)
+### 4.9 Setext title (F5 F7)
 
 ```asciidoc
 The Title
@@ -347,8 +365,35 @@ ifdef::doctitle[DOCTITLE-SET]
 
 Asciidoctor recognizes the underlined title (compatibility syntax) and renders `DOCTITLE-SET`. The transducer does not recognize it, because deciding that a line is a setext title requires **looking at the next line**, which §1 forbids.
 
+The same limit has a less visible form when the underline looks like a listing delimiter (F7):
+
+```asciidoc
+code
+----
+:flag: yes
+----
+
+ifdef::flag[FLAG-SET]
+```
+
+`code` and `----` have the same length, so Asciidoctor reads a section title: `:flag: yes` is a real entry, and the second `----` opens an unterminated listing that displays `FLAG-SET`. The transducer sees a listing, so the entry is opaque and `ifdef` is false. With a line of a different length, both models agree (B9).
+
 - **Option 1**: explicitly allow a one-line bounded look-ahead for this single case; recognition stays regular.
 - **Option 2**: treat setext as outside the model (compatibility syntax) and diagnose it.
+
+### 4.10 Where Ruby and JS Asciidoctor disagree (E9 E10 G23)
+
+The two references give different results on these cases, so the transducer cannot match both. Verdicts are locked against Asciidoctor.js; the summary counts differences against Ruby.
+
+| Case | Source | Ruby 2.0.20 | Asciidoctor.js 4.1.1 | Transducer |
+|---|---|---|---|---|
+| E9 | `ifeval::["a == b" == "a == b"]` | true | false | true |
+| E10 | `ifeval::["a" == 'a']` | false | true | true |
+| G23 | `include::a.adoc[lines=x..y]` | selects nothing | whole file | whole file |
+
+- **E9.** Ruby splits on the first operator, even inside quotes, and coerces both unquoted fragments to `0`. The result is an accident: `["a == b" == "c == d"]` is also true in Ruby and in the transducer.
+- **E10.** Ruby's `resolve_expr_val` removes only the opening quote (`val.slice 1, (val.length - 1)`), so `a"` is compared with `a'`.
+- **G23.** Ruby coerces `x..y` to the range `0..0`, which selects no line.
 
 ---
 
@@ -365,7 +410,7 @@ include::doc.adoc[lines=1;6..8]
 - **Asciidoctor (Ruby and JS)**: `WARN: unterminated listing block (doc.adoc: line 3)`. **The line number is wrong**: Asciidoctor only keeps the offset of the first selected line, then counts continuously.
 - **Transducer**: the provenance maps each output line to its actual position (`doc.adoc:1`, `:6`, `:7`, `:8`). Any diagnostic, from any layer, can therefore point to the right place (spec §7).
 
-### 5.2 D2/D3 conformance diagnostics (D8, G14, D7)
+### 5.2 D2/D3 conformance diagnostics (D8, D15, D16, G14, G25, D7)
 
 Asciidoctor silently accepts a conditional opened in an included file and closed in the including one (D8), as well as the "header/footer" pattern where `open.adoc` opens a `----` that `close.adoc` closes (G14). The rendered output is identical in both models, but the transducer reports `D2` and `D3` (as `warning`).
 
@@ -413,7 +458,7 @@ The transducer's messages reuse Asciidoctor's (malformed directive, mismatched, 
 | **Robustness** | Cycle detection, no escaped directive in a false branch, no synthetic entry in a listing (§4.8) | Bugs D6, G4, G7 |
 | **Composition** | D2/D3 diagnosed: each unit can be analyzed on its own | Conditionals and blocks can span files without any warning |
 | **Block awareness** | None: wrong when a block style changes its content model (`[source]--`, `[comment]--`) or on an entry outside a block boundary (D1) | Exact, since it is the parser |
-| **Strict compatibility** | 21 of 79 cases differ; they are edge cases, but some occur in practice (§4.2, §4.3) | The reference, by definition |
+| **Strict compatibility** | 26 of 108 cases differ; they are edge cases, but some occur in practice (§4.2, §4.3) | The reference, by definition |
 | **Integration** | The interface must supply the intrinsic attributes (§5.5) | Built in |
 | **Values** | As written | HTML-escaped, even in paths (§4.4) |
 | **New warnings** | D2/D3 on patterns that work today (§5.2) | None |
@@ -424,8 +469,8 @@ The transducer's messages reuse Asciidoctor's (malformed directive, mismatched, 
 
 In order of importance:
 
-1. **Make comments inert (§4).** *Applied.* A region opened by `////` is a barrier **for reads and writes**: no directive is evaluated inside it and its lines are emitted verbatim. The rule is lexical, reproduces Asciidoctor, removes the most dangerous defect of the original text (D9, G13), and keeps comment content intact should comments be preserved in the ASG. The `[comment]--` case (B10) remains out of reach and falls under D1.
-2. **Standardize `ifeval`**: the `operand op operand` grammar, operand typing (string, nil, boolean, integer and float with "numeric prefix, otherwise 0" semantics), and the rule "incompatible comparison = false". The misconception that `ifeval` evaluates Ruby should also be corrected.
+1. **Make comments inert (§4).** *Applied.* A region opened by `////` is a barrier **for reads and writes**: no directive is evaluated inside it and its lines are emitted verbatim. The rule is lexical, reproduces Asciidoctor, removes the most dangerous defect of the original text (D9, G13), and keeps comment content intact should comments be preserved in the ASG. The `[comment]--` case (B10) and `////` inside a styled paragraph (I9) remain out of reach and fall under D1.
+2. **Standardize `ifeval`**: the `operand op operand` grammar, operand typing (string, nil, boolean, integer and float with "numeric prefix, otherwise 0" semantics), the rule "incompatible comparison = false" (E8), and how an expression is split when a quoted operand contains an operator (E9), on which the Ruby and JS references disagree. The misconception that `ifeval` evaluates Ruby should also be corrected.
 3. **Settle Appendix C for passthrough**: `++++` is opaque. This is Asciidoctor's observed behavior (B3). Also add fenced ```` ``` ```` blocks to the verbatim set, and allow any number of `=` (≥ 3) in table delimiters.
 4. **Write down the list of intrinsic attributes** the processor must supply as initial state (`backend-*`, `basebackend-*`, `doctype-*`, `safe-mode-*`, `asciidoctor-version`…), together with the rule that derived attributes are only updated **within the header** (F2, F3).
 5. **Decide on values** (§4.4): either "no substitution besides references" (current text, saner) or "header substitutions". If the first option is kept, it should be listed among the acknowledged divergences of §5.
@@ -434,7 +479,7 @@ In order of importance:
 8. **Specify escaping**: an escaped directive inside a false branch is dropped like the rest of the branch (D6).
 9. **`leveloffset=`**: synthetic entries are only injected outside opaque regions (G4).
 10. **Include cycles**: mandatory detection by resolved path, rather than a mere depth limit (G7).
-11. **Setext**: allow a one-line look-ahead, or explicitly exclude setext from the model (F5).
+11. **Setext**: allow a one-line look-ahead, or explicitly exclude setext from the model (F5, F7).
 12. **Continuation lines**: state explicitly that they are not scanned as directives (C12).
 
 ---
@@ -443,7 +488,7 @@ In order of importance:
 
 ```console
 npm install
-npm test             # 186 tests, including one per corpus case (verdicts locked against Asciidoctor.js)
+npm test             # 215 tests, including one per corpus case (verdicts locked against Asciidoctor.js)
 npm run compare      # regenerates compare/REPORT.md; adds a Ruby column if the asciidoctor gem is installed
 ```
 
